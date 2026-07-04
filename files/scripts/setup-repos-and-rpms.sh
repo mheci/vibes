@@ -76,6 +76,7 @@ add_copr che/nerd-fonts
 # Bazzite already carries Terra/relevant third-party repo configuration where appropriate.
 
 # Refresh metadata after adding repositories.
+"${DNF[@]}" config-manager setopt fedora-cisco-openh264.enabled=1 || true
 retry "${DNF[@]}" makecache
 
 # Core packages requested by the image owner. We first query availability to avoid Fedora/latest
@@ -106,7 +107,7 @@ install_available \
   code lact scx-scheds scx-tools gamemode \
   libva-nvidia-driver nvidia-vaapi-driver nvidia-container-toolkit \
   vulkan-tools egl-utils glx-utils clinfo libva-utils \
-  ffmpeg ffmpeg-libs libavcodec-freeworld \
+  ffmpeg ffmpeg-libs libavcodec-freeworld mozilla-openh264 \
   gstreamer1-plugin-openh264 gstreamer1-plugins-base gstreamer1-plugins-good \
   gstreamer1-plugins-bad-free gstreamer1-plugins-bad-freeworld \
   gstreamer1-plugins-ugly gstreamer1-libav gstreamer1-vaapi \
