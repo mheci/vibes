@@ -101,8 +101,13 @@ install_available() {
   fi
 }
 
+# Firefox RPM can conflict with preinstalled OpenH264 providers on atomic bases; install it first
+# without those providers present, then install codecs opportunistically below.
+"${DNF[@]}" remove --no-autoremove openh264 mozilla-openh264 gstreamer1-plugin-openh264 || true
+retry "${DNF[@]}" install firefox || retry "${DNF[@]}" install --setopt=install_weak_deps=False firefox
+
 install_available \
-  firefox brave-origin \
+  brave-origin \
   faugus-launcher kitty umu-launcher pcmanfm-qt \
   code lact scx-scheds scx-tools gamemode \
   libva-nvidia-driver nvidia-vaapi-driver nvidia-container-toolkit \
