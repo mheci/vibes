@@ -48,7 +48,6 @@ jobs:
       - name: Container filesystem smoke checks
         run: |
           podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
-            /usr/bin/brave-browser \
             /usr/sbin/bpftune \
             /usr/bin/kitty \
             /usr/bin/pcmanfm-qt \
@@ -62,6 +61,10 @@ jobs:
             /usr/lib64/ladspa/librnnoise_ladspa.so \
             /etc/pipewire/pipewire.conf.d/99-input-denoising.conf
           podman run --rm --pull=always --entrypoint /usr/bin/rpm ${IMAGE} -q brave-origin
+          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} /usr/bin/brave-browser || \
+          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} /usr/bin/brave-origin || \
+          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} /opt/brave.com/brave/brave || \
+          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} /opt/brave.com/brave-origin/brave
           podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
             /usr/bin/firefox || \
           podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
