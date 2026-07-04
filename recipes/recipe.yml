@@ -3,44 +3,41 @@
 version: 1
 # image will be published to ghcr.io/mheci/vibes
 name: vibes
-# description will be included in the image's metadata
-description: Personal Fedora Silverblue Atomic image built with BlueBuild.
+description: Bazzite NVIDIA Open gaming, media, and AI workstation image built with BlueBuild.
 
-# the base image to build on top of (FROM) and the version tag to use
-base-image: ghcr.io/ublue-os/silverblue-main
-image-version: 42 # latest is also supported if you want new updates ASAP
+# Track the latest Bazzite NVIDIA-open image as requested.
+base-image: ghcr.io/ublue-os/bazzite-nvidia-open
+image-version: latest
 
-# module configuration, executed in order
-# you can include multiple instances of the same module
 modules:
-  - type: files
-    files:
-      - source: system
-        destination: / # copies files/system/* (* means everything inside it) into your image's root folder /
+  # Explicitly refresh/install Universal Blue NVIDIA-open kernel modules for the Bazzite kernel.
+  - type: akmods
+    base: bazzite
+    install: []
+    nvidia-driver: nvidia-open
 
-  - type: dnf
-    repos:
-      copr:
-        - atim/starship
-    install:
-      packages:
-        - micro
-        - starship
-    remove:
-      packages:
-        # example: removing firefox (in favor of the flatpak)
-        # "firefox" is the main package, "firefox-langpacks" is a dependency
-        - firefox
-        - firefox-langpacks # also remove firefox dependency (not required for all packages, this is a special case)
+  - type: script
+    scripts:
+      - setup-repos-and-rpms.sh
+      - install-latest-apps.sh
 
   - type: default-flatpaks
     configurations:
-      - notify: true # Send notification after install/uninstall is finished (true/false)
+      - notify: true
         scope: system
-        # If no repo information is specified, Flathub will be used by default
-        install: # system flatpaks we want all users to have and not remove
-          - org.mozilla.firefox
+        install:
           - org.gnome.Loupe
-      - scope: user # Also add Flathub user repo, but no user packages
+      - scope: user
 
-  - type: signing # this sets up the proper policy & signing files for signed images to work fully
+  - type: files
+    files:
+      - source: system
+        destination: /
+
+  # Keep signed-image policy support after all customizations.
+  - type: signing
+
+  # bootc-recommended sanity checks at image build time.
+  - type: containerfile
+    snippets:
+      - RUN bootc container lint

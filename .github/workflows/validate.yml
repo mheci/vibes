@@ -1,0 +1,84 @@
+name: validate-image
+
+on:
+  workflow_run:
+    workflows: [bluebuild]
+    types: [completed]
+  workflow_dispatch:
+  schedule:
+    - cron: "37 09 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}:latest
+
+jobs:
+  validate:
+    name: Validate published bootc image
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo podman jq
+
+      - name: Inspect image manifest
+        run: |
+          skopeo inspect docker://${IMAGE} | jq '{Name, Digest, Created, Labels}'
+
+      - name: Verify cosign signature
+        uses: sigstore/cosign-installer@v3
+      - run: cosign verify --key cosign.pub ${IMAGE}
+
+      - name: bootc container lint
+        run: |
+          podman run --rm --privileged --pull=always --entrypoint /usr/bin/bootc ${IMAGE} container lint
+
+      - name: Runtime smoke checks
+        run: |
+          podman run --rm --pull=always --entrypoint /usr/bin/bash ${IMAGE} -lc '
+            set -euo pipefail
+            test -e /usr/lib/modules
+            command -v firefox
+            command -v brave-browser
+            command -v kitty
+            command -v pcmanfm-qt
+            command -v code
+            command -v zed
+            command -v lact
+            command -v scx_lavd
+            command -v opencode
+            test -x /opt/lmstudio/LM_Studio.AppImage
+            test -x /opt/vicinae/vicinae.AppImage
+            test -f /usr/local/lib/ladspa/librnnoise_ladspa.so
+            test -f /etc/pipewire/pipewire.conf.d/99-input-denoising.conf
+            test -f /etc/scx_loader/config.toml || test -f /usr/lib/systemd/system/scx-lavd.service
+            rpm -qa | sort | grep -Ei "(nvidia|firefox|brave|kitty|pcmanfm|lact|scx|ffmpeg|gstreamer|hunspell|arabic|nerd|zed|code)" | head -200
+          '
+
+      - name: CVE scan with Trivy
+        uses: aquasecurity/trivy-action@0.31.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif

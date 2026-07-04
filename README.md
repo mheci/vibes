@@ -1,8 +1,8 @@
 # vibes &nbsp; [![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml)
 
-Personal Fedora Silverblue Atomic image built with [BlueBuild](https://blue-build.org/).
+Personal Bazzite NVIDIA Open gaming, media, and AI workstation image built with [BlueBuild](https://blue-build.org/).
 
-Current base: `ghcr.io/ublue-os/silverblue-main:42` → published as `ghcr.io/mheci/vibes`.
+Current base: `ghcr.io/ublue-os/bazzite-nvidia-open:latest` → published as `ghcr.io/mheci/vibes`.
 
 ## Installation
 
