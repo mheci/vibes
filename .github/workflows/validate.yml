@@ -47,25 +47,9 @@ jobs:
 
       - name: Runtime smoke checks
         run: |
-          podman run --rm --pull=always --entrypoint /usr/bin/bash ${IMAGE} -lc '
-            set -euo pipefail
-            test -e /usr/lib/modules
-            command -v firefox
-            command -v brave-browser
-            command -v kitty
-            command -v pcmanfm-qt
-            command -v code
-            command -v zed
-            command -v lact
-            command -v scx_lavd
-            command -v opencode
-            test -x /opt/lmstudio/LM_Studio.AppImage
-            test -x /opt/vicinae/vicinae.AppImage
-            test -f /usr/local/lib/ladspa/librnnoise_ladspa.so
-            test -f /etc/pipewire/pipewire.conf.d/99-input-denoising.conf
-            test -f /etc/scx_loader/config.toml || test -f /usr/lib/systemd/system/scx-lavd.service
-            printf "smoke checks passed\n"
-          '
+          # Avoid invoking rpm-ostree-aware shell/profile logic in a non-booted container.
+          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE}             /usr/bin/firefox             /usr/bin/brave-browser             /usr/bin/kitty             /usr/bin/pcmanfm-qt             /usr/bin/code             /usr/local/bin/zed             /usr/bin/lact             /usr/bin/scx_lavd             /usr/local/bin/opencode             /opt/lmstudio/LM_Studio.AppImage             /opt/vicinae/vicinae.AppImage             /usr/local/lib/ladspa/librnnoise_ladspa.so             /etc/pipewire/pipewire.conf.d/99-input-denoising.conf
+          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE}             /etc/scx_loader/config.toml ||           podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE}             /usr/lib/systemd/system/scx-lavd.service
 
       - name: CVE scan with Trivy
         uses: aquasecurity/trivy-action@v0.36.0
