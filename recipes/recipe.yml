@@ -1,9 +1,10 @@
 ---
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
-# image will be published to ghcr.io/<user>/<name>
+version: 1
+# image will be published to ghcr.io/mheci/vibes
 name: vibes
 # description will be included in the image's metadata
-description: This is my personal OS image.
+description: Personal Fedora Silverblue Atomic image built with BlueBuild.
 
 # the base image to build on top of (FROM) and the version tag to use
 base-image: ghcr.io/ublue-os/silverblue-main
