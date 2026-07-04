@@ -93,9 +93,9 @@ install_available() {
     return 0
   fi
   if ! retry "${DNF[@]}" install "${available[@]}"; then
-    echo "WARN: batch package install failed; retrying packages one-by-one" >&2
+    echo "WARN: batch package install failed; retrying packages one-by-one without long retries" >&2
     for pkg in "${available[@]}"; do
-      retry "${DNF[@]}" install "$pkg" || echo "WARN: failed to install optional package: $pkg" >&2
+      "${DNF[@]}" install "$pkg" || echo "WARN: failed to install optional package: $pkg" >&2
     done
   fi
 }
