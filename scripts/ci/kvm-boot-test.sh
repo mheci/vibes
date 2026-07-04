@@ -101,6 +101,7 @@ sudo podman run \
   -v /var/lib/containers/storage:/var/lib/containers/storage \
   "$BIB_IMAGE" \
   --type qcow2 \
+  --rootfs btrfs \
   --use-librepo=True \
   "$IMAGE" 2>&1 | tee "$BIB_LOG"
 
