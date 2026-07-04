@@ -62,8 +62,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y skopeo podman jq curl
-          # Syft for SBOM generation
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
 
       - name: Inspect image manifest
         env:
@@ -152,24 +150,6 @@ jobs:
             echo "ERROR: one or more filesystem smoke checks failed" >&2
             exit 1
           fi
-
-      - name: Generate SBOM
-        continue-on-error: true
-        env:
-          IMAGE: ${{ needs.metadata.outputs.image }}
-        run: |
-          syft ${IMAGE} -o spdx-json=vibes-sbom.spdx.json -o cyclonedx-json=vibes-sbom.cdx.json || true
-
-      - name: Upload SBOM artifacts
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom
-          path: |
-            vibes-sbom.spdx.json
-            vibes-sbom.cdx.json
-          if-no-files-found: warn
 
       - name: Extract package manifest
         env:
