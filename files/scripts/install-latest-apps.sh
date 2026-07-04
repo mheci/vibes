@@ -147,9 +147,24 @@ fi
 install -Dm755 "${ladspa_so}" /usr/lib64/ladspa/librnnoise_ladspa.so
 rm -rf /tmp/linux-rnnoise /tmp/linux-rnnoise.zip
 
+# bpftune latest from upstream. Fedora packages are not consistently available, so build from source.
+echo "Building and installing latest bpftune from upstream"
+rm -rf /tmp/bpftune
+retry git clone --depth 1 https://github.com/oracle/bpftune.git /tmp/bpftune
+make -C /tmp/bpftune -j"$(nproc)"
+make -C /tmp/bpftune install
+ldconfig || true
+install -d -m 0755 /etc/systemd/system/multi-user.target.wants
+if [[ -f /usr/lib/systemd/system/bpftune.service ]]; then
+  ln -sf /usr/lib/systemd/system/bpftune.service /etc/systemd/system/multi-user.target.wants/bpftune.service
+elif [[ -f /lib/systemd/system/bpftune.service ]]; then
+  ln -sf /lib/systemd/system/bpftune.service /etc/systemd/system/multi-user.target.wants/bpftune.service
+fi
+rm -rf /tmp/bpftune
+
 # Smoke checks for intentionally requested critical commands/assets.
 missing=0
-for cmd in firefox brave-browser kitty pcmanfm-qt code zed lact scx_lavd opencode lmstudio vicinae; do
+for cmd in kitty pcmanfm-qt code zed lact scx_lavd opencode lmstudio vicinae; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "WARN: requested command not found after install: $cmd" >&2
     missing=1
@@ -159,6 +174,14 @@ done
 if ! command -v heroic >/dev/null 2>&1 && ! command -v heroic-games-launcher >/dev/null 2>&1; then
   echo "WARN: Heroic launcher command not found after install" >&2
   missing=1
+fi
+if ! command -v bpftune >/dev/null 2>&1 && [[ ! -x /usr/sbin/bpftune ]]; then
+  echo "ERROR: bpftune missing after build" >&2
+  exit 1
+fi
+if [[ ! -e /etc/systemd/system/multi-user.target.wants/bpftune.service ]]; then
+  echo "ERROR: bpftune service is not enabled" >&2
+  exit 1
 fi
 if [[ ! -f /usr/lib64/ladspa/librnnoise_ladspa.so ]]; then
   echo "ERROR: RNNoise LADSPA plugin missing" >&2

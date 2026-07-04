@@ -102,11 +102,12 @@ install_available() {
 }
 
 install_available \
-  firefox brave-browser \
+  firefox brave-origin \
   faugus-launcher kitty umu-launcher pcmanfm-qt \
   code lact scx-scheds scx-tools gamemode \
   libva-nvidia-driver nvidia-vaapi-driver nvidia-container-toolkit \
   vulkan-tools egl-utils glx-utils clinfo libva-utils \
+  git make gcc clang llvm bpftool libbpf libbpf-devel libcap libcap-devel libnl3 libnl3-devel python3-docutils elfutils-libelf-devel pkgconf-pkg-config \
   ffmpeg ffmpeg-libs libavcodec-freeworld mozilla-openh264 \
   gstreamer1-plugin-openh264 gstreamer1-plugins-base gstreamer1-plugins-good \
   gstreamer1-plugins-bad-free gstreamer1-plugins-bad-freeworld \

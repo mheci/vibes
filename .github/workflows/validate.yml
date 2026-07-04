@@ -49,6 +49,7 @@ jobs:
         run: |
           podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
             /usr/bin/brave-browser \
+            /usr/sbin/bpftune \
             /usr/bin/kitty \
             /usr/bin/pcmanfm-qt \
             /usr/bin/code \
@@ -60,10 +61,13 @@ jobs:
             /usr/lib/vibes-apps/vicinae/vicinae.AppImage \
             /usr/lib64/ladspa/librnnoise_ladspa.so \
             /etc/pipewire/pipewire.conf.d/99-input-denoising.conf
+          podman run --rm --pull=always --entrypoint /usr/bin/rpm ${IMAGE} -q brave-origin
           podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
             /usr/bin/firefox || \
           podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
             /usr/lib64/firefox/firefox
+          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
+            /etc/systemd/system/multi-user.target.wants/bpftune.service
           podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
             /etc/scx_loader/config.toml || \
           podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
