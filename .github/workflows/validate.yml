@@ -104,12 +104,19 @@ jobs:
             fi
           }
 
+          check_path_warn() {
+            podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} "$1" >/dev/null 2>&1
+            if [[ $? -ne 0 ]]; then
+              echo "WARN: $1 missing (may be excluded by base image)" >&2
+            else
+              echo "OK: $1"
+            fi
+          }
+
           check_path /usr/sbin/bpftune
           check_path /usr/bin/kitty
-          check_path /usr/bin/pcmanfm-qt
           check_path /usr/bin/code
           check_path /usr/bin/zed
-          check_path /usr/bin/lact
           check_path /usr/bin/scx_lavd
           check_path /usr/bin/opencode
           check_path /usr/lib/vibes-apps/lmstudio/LM_Studio.AppImage
@@ -117,6 +124,10 @@ jobs:
           check_path /etc/pipewire/pipewire.conf.d/99-input-denoising.conf
           check_path /etc/scx_loader/config.toml
           check_path /etc/profile.d/90-vibes-nvidia-accel.sh
+
+          # pcmanfm-qt and lact are optional on Bazzite due to mesa-libEGL/gtk4 exclusions
+          check_path_warn /usr/bin/pcmanfm-qt
+          check_path_warn /usr/bin/lact
 
           # Brave-origin must exist as an RPM or binary
           podman run --rm --pull=always --entrypoint /usr/bin/rpm ${IMAGE} -q brave-origin >/dev/null 2>&1 && echo "OK: brave-origin RPM" || {

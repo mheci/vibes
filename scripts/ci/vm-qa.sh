@@ -61,17 +61,27 @@ fi
 
 # 4. Critical binaries
 CRITICAL_BINS=(
-  kitty pcmanfm-qt firefox waterfox brave-origin
+  kitty firefox waterfox brave-origin
   code zed opencode lmstudio vicinae
   umu-launcher faugus-launcher
   heroic heroic-games-launcher
-  lact scx_lavd bpftune
+  scx_lavd bpftune
 )
 for bin in "${CRITICAL_BINS[@]}"; do
   if command -v "$bin" >/dev/null 2>&1; then
     pass "Binary present: $bin"
   else
     warn "Binary missing: $bin"
+  fi
+done
+
+# Optional binaries (may be excluded by Bazzite base image)
+OPTIONAL_BINS=(pcmanfm-qt lact)
+for bin in "${OPTIONAL_BINS[@]}"; do
+  if command -v "$bin" >/dev/null 2>&1; then
+    pass "Optional binary present: $bin"
+  else
+    warn "Optional binary missing: $bin (excluded by base image)"
   fi
 done
 
