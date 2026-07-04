@@ -154,12 +154,15 @@ jobs:
           fi
 
       - name: Generate SBOM
+        continue-on-error: true
         env:
           IMAGE: ${{ needs.metadata.outputs.image }}
         run: |
           syft ${IMAGE} -o spdx-json=vibes-sbom.spdx.json -o cyclonedx-json=vibes-sbom.cdx.json || true
 
       - name: Upload SBOM artifacts
+        if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: sbom
