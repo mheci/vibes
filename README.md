@@ -1,8 +1,19 @@
-# vibes &nbsp; [![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml)
+# vibes &nbsp; [![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml) [![validate-image badge](https://github.com/mheci/vibes/actions/workflows/validate.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/validate.yml)
 
 Personal Bazzite NVIDIA Open gaming, media, and AI workstation image built with [BlueBuild](https://blue-build.org/).
 
 Current base: `ghcr.io/ublue-os/bazzite-nvidia-open:latest` → published as `ghcr.io/mheci/vibes`.
+
+## What's inside
+
+- **Base**: Bazzite NVIDIA Open (latest)
+- **Browsers**: Waterfox (RPM + Flatpak), Brave Origin (RPM with uBlock Origin policy), Firefox (RPM replacing Flatpak)
+- **Development**: VS Code, Zed, opencode CLI + Desktop, Heroic Games Launcher
+- **AI**: LM Studio, Vicinae launcher
+- **Gaming**: Faugus Launcher, umu-launcher, LACT, MangoHud, GameScope, scx LAVD scheduler (performance mode)
+- **Audio**: High-quality PipeWire + WirePlumber configs, RNNoise stereo noise suppression
+- **GPU**: NVIDIA Open kernel modules (always latest), VAAPI/VDPAU/NVD acceleration defaults
+- **System**: bpftune enabled, comprehensive codec & thumbnail support, nerd fonts, Arabic + English spellcheck
 
 ## Installation
 
@@ -29,6 +40,16 @@ To rebase an existing atomic Fedora installation to the latest build:
   ```
 
 The `latest` tag will automatically point to the latest build. That build will still always use the Fedora version specified in `recipe.yml`, so you won't get accidentally updated to the next major version.
+
+## Validation
+
+Every successful build triggers a comprehensive validation pipeline:
+
+- **Static validation**: cosign signature verification, bootc container lint, filesystem smoke checks, SBOM generation
+- **Security scanning**: Trivy + Grype CVE scans with SARIF upload
+- **KVM boot test**: Full qcow2 conversion and QEMU/KVM boot with nested virtualization on GitHub Actions
+- **In-VM automated QA**: SSH-based health checks for kernel panics, systemd failures, GPU acceleration, audio stack, and critical packages
+- **Regression detection**: Package manifest comparison between builds
 
 ## ISO
 

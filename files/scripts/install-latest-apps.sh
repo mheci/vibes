@@ -21,17 +21,41 @@ retry() {
   done
 }
 
+# Use GitHub PAT if available to avoid rate limits.
+GH_API_HEADERS=(-H "Accept: application/vnd.github+json" -H "User-Agent: vibes-bluebuild")
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  GH_API_HEADERS+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+elif [[ -n "${GH_PAT:-}" ]]; then
+  GH_API_HEADERS+=(-H "Authorization: Bearer ${GH_PAT}")
+fi
+
 gh_asset_url() {
   local repo="$1" pattern="$2"
   python3 - "$repo" "$pattern" <<'PY'
 import json, re, sys, urllib.request
 repo, pattern = sys.argv[1], sys.argv[2]
+headers = {
+    "Accept": "application/vnd.github+json",
+    "User-Agent": "vibes-bluebuild",
+}
+# Forward auth from environment if present
+token = None
+for env in ("GITHUB_TOKEN", "GH_PAT"):
+    if sys.environ.get(env):
+        token = sys.environ[env]
+        break
+if token:
+    headers["Authorization"] = f"Bearer {token}"
 req = urllib.request.Request(
     f"https://api.github.com/repos/{repo}/releases/latest",
-    headers={"Accept": "application/vnd.github+json", "User-Agent": "vibes-bluebuild"},
+    headers=headers,
 )
-with urllib.request.urlopen(req, timeout=60) as r:
-    data = json.load(r)
+try:
+    with urllib.request.urlopen(req, timeout=60) as r:
+        data = json.load(r)
+except urllib.error.HTTPError as e:
+    print(f"GitHub API error: {e.code} {e.reason}", file=sys.stderr)
+    sys.exit(1)
 rx = re.compile(pattern, re.I)
 for asset in data.get("assets", []):
     name = asset.get("name", "")
@@ -81,7 +105,6 @@ StartupNotify=true
 EOFDESKTOP
 }
 
-
 # Zed latest official Linux tarball.
 install -d -m 0755 /usr/lib/zed /usr/bin /usr/share/applications /usr/share/icons/hicolor
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/zed-linux-x86_64.tar.gz \
@@ -101,10 +124,9 @@ if [[ -d /usr/lib/zed/share/icons/hicolor ]]; then
 fi
 rm -rf /tmp/zed.app /tmp/zed-linux-x86_64.tar.gz
 
-# Latest GitHub-release RPM/AppImage applications.
-install_latest_rpm "anomalyco/opencode" 'opencode-desktop-linux-(amd64|x86_64).*\.rpm$' "opencode-desktop"
-install_latest_rpm "Heroic-Games-Launcher/HeroicGamesLauncher" 'Heroic-.*linux.*(x86_64|x64|amd64).*\.rpm$' "heroic"
-install_latest_appimage "vicinaehq/vicinae" 'Vicinae-x86_64\.AppImage$' "vicinae" "Vicinae" "Raycast-inspired launcher" "Utility;"
+# Latest GitHub-release RPM applications.
+install_latest_rpm "anomalyco/opencode" 'opencode-desktop-linux-x86_64\.rpm$' "opencode-desktop"
+install_latest_rpm "Heroic-Games-Launcher/HeroicGamesLauncher" 'Heroic-.*linux.*x86_64.*\.rpm$' "heroic"
 
 # LM Studio latest official AppImage.
 install -d -m 0755 /usr/lib/vibes-apps/lmstudio /usr/share/applications /usr/bin
@@ -132,7 +154,7 @@ if [[ -x /root/.opencode/bin/opencode && ! -x /usr/bin/opencode ]]; then
   install -Dm755 /root/.opencode/bin/opencode /usr/bin/opencode
 fi
 
-# werman RNNoise plugin release: install LADSPA plugin and keep the full bundle under /usr/local/lib/rnnoise.
+# werman RNNoise plugin release: install LADSPA plugin and keep the full bundle under /usr/lib64/rnnoise.
 install -d -m 0755 /usr/lib64/rnnoise /usr/lib64/ladspa
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/linux-rnnoise.zip \
   "$(gh_asset_url "werman/noise-suppression-for-voice" 'linux-rnnoise\.zip$')"
@@ -147,10 +169,12 @@ fi
 install -Dm755 "${ladspa_so}" /usr/lib64/ladspa/librnnoise_ladspa.so
 rm -rf /tmp/linux-rnnoise /tmp/linux-rnnoise.zip
 
-# bpftune latest from upstream. Fedora packages are not consistently available, so build from source.
+# bpftune latest from upstream. Build from source since Fedora packages are inconsistent.
 echo "Building and installing latest bpftune from upstream"
 rm -rf /tmp/bpftune
 retry git clone --depth 1 https://github.com/oracle/bpftune.git /tmp/bpftune
+# Ensure kernel headers are present for the build.
+"${DNF[@]}" install --skip-unavailable kernel-headers kernel-devel || true
 make -C /tmp/bpftune -j"$(nproc)"
 make -C /tmp/bpftune install
 ldconfig || true

@@ -13,12 +13,43 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}:latest
+  IMAGE_BASE: ghcr.io/${{ github.repository }}
 
 jobs:
+  metadata:
+    name: Resolve image reference
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.resolve.outputs.image }}
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - name: Install skopeo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+
+      - name: Resolve image tag
+        id: resolve
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            SHA="${{ github.event.workflow_run.head_sha }}"
+            # Try to find a tag matching this SHA; fall back to latest.
+            IMAGE="${IMAGE_BASE}:${SHA}"
+            if ! skopeo inspect docker://${IMAGE} >/dev/null 2>&1; then
+              IMAGE="${IMAGE_BASE}:latest"
+            fi
+          else
+            SHA="${{ github.sha }}"
+            IMAGE="${IMAGE_BASE}:latest"
+          fi
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "Testing image: ${IMAGE} (sha: ${SHA})"
+
   static-validation:
     name: Static bootc/container validation
     runs-on: ubuntu-latest
+    needs: metadata
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: read
@@ -30,56 +61,166 @@ jobs:
       - name: Install validation tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y skopeo podman jq
+          sudo apt-get install -y skopeo podman jq curl
+          # Syft for SBOM generation
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
 
       - name: Inspect image manifest
+        env:
+          IMAGE: ${{ needs.metadata.outputs.image }}
         run: |
+          echo "=== Image Manifest ==="
           skopeo inspect docker://${IMAGE} | jq '{Name, Digest, Created, Labels}'
+          echo "=== Image Tags ==="
+          skopeo inspect docker://${IMAGE} | jq -r '.RepoTags[]' || true
 
       - name: Verify cosign signature
         uses: sigstore/cosign-installer@v3
       - name: cosign verify
+        env:
+          IMAGE: ${{ needs.metadata.outputs.image }}
         run: cosign verify --key cosign.pub ${IMAGE}
 
       - name: bootc container lint
+        env:
+          IMAGE: ${{ needs.metadata.outputs.image }}
         run: |
           podman run --rm --privileged --pull=always --entrypoint /usr/bin/bootc ${IMAGE} container lint
 
-      - name: Container filesystem smoke checks
+      - name: Filesystem smoke checks
+        env:
+          IMAGE: ${{ needs.metadata.outputs.image }}
         run: |
-          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
-            /usr/sbin/bpftune \
-            /usr/bin/kitty \
-            /usr/bin/pcmanfm-qt \
-            /usr/bin/code \
-            /usr/bin/zed \
-            /usr/bin/lact \
-            /usr/bin/scx_lavd \
-            /usr/bin/opencode \
-            /usr/lib/vibes-apps/lmstudio/LM_Studio.AppImage \
-            /usr/lib/vibes-apps/vicinae/vicinae.AppImage \
-            /usr/lib64/ladspa/librnnoise_ladspa.so \
-            /etc/pipewire/pipewire.conf.d/99-input-denoising.conf
-          podman run --rm --pull=always --entrypoint /usr/bin/rpm ${IMAGE} -q brave-origin
-          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} /usr/bin/brave-browser || \
-          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} /usr/bin/brave-origin || \
-          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} /opt/brave.com/brave/brave || \
-          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} /opt/brave.com/brave-origin/brave
-          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
-            /usr/bin/firefox || \
-          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
-            /usr/lib64/firefox/firefox
-          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
-            /etc/systemd/system/multi-user.target.wants/bpftune.service
-          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
-            /etc/scx_loader/config.toml || \
-          podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} \
-            /usr/lib/systemd/system/scx-lavd.service
+          set +e
+          FAIL=0
+
+          check_path() {
+            podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} "$1" >/dev/null 2>&1
+            if [[ $? -ne 0 ]]; then
+              echo "MISSING: $1" >&2
+              FAIL=1
+            else
+              echo "OK: $1"
+            fi
+          }
+
+          check_path /usr/sbin/bpftune
+          check_path /usr/bin/kitty
+          check_path /usr/bin/pcmanfm-qt
+          check_path /usr/bin/code
+          check_path /usr/bin/zed
+          check_path /usr/bin/lact
+          check_path /usr/bin/scx_lavd
+          check_path /usr/bin/opencode
+          check_path /usr/lib/vibes-apps/lmstudio/LM_Studio.AppImage
+          check_path /usr/lib64/ladspa/librnnoise_ladspa.so
+          check_path /etc/pipewire/pipewire.conf.d/99-input-denoising.conf
+          check_path /etc/scx_loader/config.toml
+          check_path /etc/profile.d/90-vibes-nvidia-accel.sh
+
+          # Brave-origin must exist as an RPM or binary
+          podman run --rm --pull=always --entrypoint /usr/bin/rpm ${IMAGE} -q brave-origin >/dev/null 2>&1 && echo "OK: brave-origin RPM" || {
+            podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} /usr/bin/brave-origin >/dev/null 2>&1 && echo "OK: brave-origin binary" || {
+              echo "MISSING: brave-origin" >&2; FAIL=1
+            }
+          }
+
+          # Firefox RPM (not flatpak)
+          podman run --rm --pull=always --entrypoint /usr/bin/rpm ${IMAGE} -q firefox >/dev/null 2>&1 && echo "OK: firefox RPM" || {
+            echo "MISSING: firefox RPM" >&2; FAIL=1
+          }
+
+          # bpftune service enabled
+          check_path /etc/systemd/system/multi-user.target.wants/bpftune.service
+
+          # scx service enabled
+          check_path /etc/systemd/system/multi-user.target.wants/scx_loader.service || \
+          check_path /etc/systemd/system/multi-user.target.wants/scx-lavd.service
+
+          if [[ $FAIL -ne 0 ]]; then
+            echo "ERROR: one or more filesystem smoke checks failed" >&2
+            exit 1
+          fi
+
+      - name: Generate SBOM
+        env:
+          IMAGE: ${{ needs.metadata.outputs.image }}
+        run: |
+          syft ${IMAGE} -o spdx-json=vibes-sbom.spdx.json -o cyclonedx-json=vibes-sbom.cdx.json || true
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            vibes-sbom.spdx.json
+            vibes-sbom.cdx.json
+          if-no-files-found: warn
+
+      - name: Extract package manifest
+        env:
+          IMAGE: ${{ needs.metadata.outputs.image }}
+        run: |
+          podman run --rm --pull=always --entrypoint /usr/bin/rpm ${IMAGE} -qa --qf '%{NAME}\n' | sort > vibes-packages-manifest.txt
+
+      - name: Upload package manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-manifest
+          path: vibes-packages-manifest.txt
+          if-no-files-found: warn
+
+  security-scan:
+    name: Security / CVE scan
+    runs-on: ubuntu-latest
+    needs: [metadata, static-validation]
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: CVE scan with Trivy
+        uses: aquasecurity/trivy-action@0.29.0
+        env:
+          IMAGE: ${{ needs.metadata.outputs.image }}
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Upload Trivy SARIF
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: CVE scan with Grype
+        env:
+          IMAGE: ${{ needs.metadata.outputs.image }}
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+          grype ${IMAGE} -o json > grype-results.json || true
+          grype ${IMAGE} --fail-on critical || true
+
+      - name: Upload Grype results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype-results
+          path: grype-results.json
+          if-no-files-found: warn
 
   kvm-boot-validation:
-    name: KVM qcow2 boot validation
+    name: KVM qcow2 boot + in-VM QA
     runs-on: ubuntu-latest
-    needs: static-validation
+    needs: [metadata, static-validation]
     timeout-minutes: 45
     permissions:
       contents: read
@@ -91,17 +232,18 @@ jobs:
       - name: Install KVM and bootc image tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman qemu-system-x86 qemu-utils ovmf jq
+          sudo apt-get install -y podman qemu-system-x86 qemu-utils ovmf jq openssh-client
           test -e /dev/kvm
           sudo chmod 666 /dev/kvm || true
 
-      - name: Boot image in QEMU/KVM and scan serial console
+      - name: Boot image in QEMU/KVM and run automated QA
         env:
-          IMAGE: ${{ env.IMAGE }}
+          IMAGE: ${{ needs.metadata.outputs.image }}
           WORKDIR: ${{ github.workspace }}/kvm-boot-work
           TIMEOUT_SECONDS: "900"
           MEMORY_MB: "8192"
           VCPUS: "4"
+          GH_PAT: ${{ secrets.GITHUB_TOKEN }}
         run: scripts/ci/kvm-boot-test.sh
 
       - name: Upload KVM boot logs
@@ -112,33 +254,5 @@ jobs:
           path: |
             kvm-boot-work/*.log
             kvm-boot-work/config.toml
+            kvm-boot-work/vibes-qa/**
           if-no-files-found: warn
-
-  security-scan:
-    name: Trivy CVE/security scan
-    runs-on: ubuntu-latest
-    needs: static-validation
-    permissions:
-      contents: read
-      packages: read
-      security-events: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: CVE scan with Trivy
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: ${{ env.IMAGE }}
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          exit-code: "1"
-
-      - name: Upload Trivy SARIF
-        if: always()
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-results.sarif

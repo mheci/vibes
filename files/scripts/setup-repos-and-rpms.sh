@@ -24,10 +24,13 @@ retry() {
 add_copr() {
   local copr="$1"
   echo "Enabling COPR: ${copr}"
-  retry "${DNF[@]}" copr enable "$copr"
+  retry "${DNF[@]}" copr enable "$copr" || {
+    echo "WARN: failed to enable COPR ${copr}, continuing anyway" >&2
+    return 0
+  }
 }
 
-# Official Brave RPM repository.
+# Official Brave RPM repository (provides brave-origin and brave-browser).
 install -d -m 0755 /etc/yum.repos.d
 cat >/etc/yum.repos.d/brave-browser.repo <<'REPO'
 [brave-browser]
@@ -53,7 +56,7 @@ gpgkey=https://packages.microsoft.com/keys/microsoft.asc
 skip_if_unavailable=True
 REPO
 
-# Waterfox RPM repo. Kept skip_if_unavailable because Waterfox's Fedora repo availability can lag new Fedora versions.
+# Waterfox RPM repo.
 cat >/etc/yum.repos.d/waterfox.repo <<'REPO'
 [waterfox]
 name=Waterfox
@@ -64,7 +67,7 @@ gpgkey=https://repo.waterfox.net/key.asc
 skip_if_unavailable=True
 REPO
 
-# Ensure DNF COPR/config-manager plugins are available on the base image.
+# Ensure DNF COPR/config-manager plugins are available.
 retry "${DNF[@]}" install --skip-unavailable dnf5-plugins dnf-plugins-core || true
 
 # COPRs for requested/adjacent software.
@@ -73,7 +76,10 @@ add_copr ilyaz/LACT
 add_copr bieszczaders/kernel-cachyos-addons
 add_copr che/nerd-fonts
 
-# Bazzite already carries Terra/relevant third-party repo configuration where appropriate.
+# Terra is already present on Bazzite; ensure it is enabled for vicinae and friends.
+if [[ -f /etc/yum.repos.d/terra.repo ]]; then
+  sed -i 's/^enabled=0/enabled=1/' /etc/yum.repos.d/terra.repo || true
+fi
 
 # Refresh metadata after adding repositories.
 "${DNF[@]}" config-manager setopt fedora-cisco-openh264.enabled=1 || true
@@ -101,18 +107,30 @@ install_available() {
   fi
 }
 
+# Remove flatpak Firefox if present so the RPM replacement is the only Firefox.
+if command -v flatpak >/dev/null 2>&1; then
+  flatpak uninstall --system -y org.mozilla.firefox >/dev/null 2>&1 || true
+fi
+
 # Firefox RPM can conflict with preinstalled OpenH264 providers on atomic bases; install it first
 # without those providers present, then install codecs opportunistically below.
 "${DNF[@]}" remove --no-autoremove openh264 mozilla-openh264 gstreamer1-plugin-openh264 || true
 retry "${DNF[@]}" install firefox || retry "${DNF[@]}" install --setopt=install_weak_deps=False firefox
 
+# Install Waterfox from its RPM repo (configured above).
+install_available waterfox || true
+
+# Always pull the latest NVIDIA Open kernel module tooling so akmods rebuilds stay current.
+# Bazzite base already ships the open driver; this ensures the akmod layer is present for updates.
+install_available akmod-nvidia-open nvidia-open-dkms nvidia-open-kmod || true
+
 install_available \
   brave-origin \
   faugus-launcher kitty umu-launcher pcmanfm-qt \
-  code lact scx-scheds scx-tools gamemode \
+  code lact scx-scheds scx-tools-git gamemode \
   libva-nvidia-driver nvidia-vaapi-driver nvidia-container-toolkit \
-  vulkan-tools egl-utils glx-utils clinfo libva-utils \
-  git make gcc clang llvm bpftool libbpf libbpf-devel libcap libcap-devel libnl3 libnl3-devel python3-docutils elfutils-libelf-devel pkgconf-pkg-config \
+  vulkan-tools egl-utils glx-utils clinfo libva-utils mesa-vulkan-drivers \
+  git make gcc clang llvm bpftool libbpf libbpf-devel libcap libcap-devel libnl3 libnl3-devel python3-docutils elfutils-libelf-devel pkgconf-pkg-config zlib-devel cmake ninja-build \
   ffmpeg ffmpeg-libs libavcodec-freeworld mozilla-openh264 \
   gstreamer1-plugin-openh264 gstreamer1-plugins-base gstreamer1-plugins-good \
   gstreamer1-plugins-bad-free gstreamer1-plugins-bad-freeworld \
@@ -125,8 +143,16 @@ install_available \
   words autocorr-en autocorr-ar \
   nerd-fonts jetbrains-mono-fonts fira-code-fonts cascadia-code-fonts \
   google-noto-sans-arabic-fonts google-noto-naskh-arabic-fonts google-noto-kufi-arabic-fonts \
-  wireplumber pipewire pipewire-utils pipewire-alsa pipewire-pulseaudio pipewire-jack-audio-connection-kit
+  wireplumber pipewire pipewire-utils pipewire-alsa pipewire-pulseaudio pipewire-jack-audio-connection-kit \
+  mangohud gamescope
 
+# Vicinae from Terra (Bazzite already carries Terra; enabled above).
+install_available vicinae || {
+  echo "WARN: vicinae not available from Terra; falling back to COPR quadratech188/vicinae" >&2
+  add_copr quadratech188/vicinae || add_copr scottames/vicinae || true
+  retry "${DNF[@]}" makecache || true
+  install_available vicinae || true
+}
 
 # Brave + uBlock Origin policy. This gives "Brave + Origin" behavior without mutating user profiles.
 install -d -m 0755 /etc/brave/policies/managed /etc/chromium/policies/managed
@@ -169,7 +195,19 @@ export NVD_BACKEND=direct
 EOFENV
 chmod 0644 /etc/profile.d/90-vibes-nvidia-accel.sh
 
-# LACT daemon: enable if RPM installed a service. This creates the symlink in the image without requiring systemd to run.
+# Also set the same for shells that source /etc/environment.d
+install -d -m 0755 /etc/environment.d
+cat >/etc/environment.d/90-vibes-nvidia-accel.conf <<'EOFENV'
+MOZ_ENABLE_WAYLAND=1
+MOZ_WEBRENDER=1
+LIBVA_DRIVER_NAME=nvidia
+VDPAU_DRIVER=nvidia
+__GLX_VENDOR_LIBRARY_NAME=nvidia
+GBM_BACKEND=nvidia-drm
+NVD_BACKEND=direct
+EOFENV
+
+# LACT daemon: enable if RPM installed a service.
 install -d -m 0755 /etc/systemd/system/multi-user.target.wants
 if [[ -f /usr/lib/systemd/system/lactd.service ]]; then
   ln -sf /usr/lib/systemd/system/lactd.service /etc/systemd/system/multi-user.target.wants/lactd.service
@@ -188,6 +226,7 @@ auto_mode = ["--autopilot"]
 powersave_mode = ["--powersave"]
 server_mode = ["--autopilot"]
 TOML
+
 if [[ -f /usr/lib/systemd/system/scx_loader.service ]]; then
   ln -sf /usr/lib/systemd/system/scx_loader.service /etc/systemd/system/multi-user.target.wants/scx_loader.service
 elif command -v scx_lavd >/dev/null 2>&1; then
