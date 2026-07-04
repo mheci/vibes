@@ -10,12 +10,6 @@ base-image: ghcr.io/ublue-os/bazzite-nvidia-open
 image-version: latest
 
 modules:
-  # Explicitly refresh/install Universal Blue NVIDIA-open kernel modules for the Bazzite kernel.
-  - type: akmods
-    base: bazzite
-    install: []
-    nvidia-driver: nvidia-open
-
   - type: script
     scripts:
       - setup-repos-and-rpms.sh
