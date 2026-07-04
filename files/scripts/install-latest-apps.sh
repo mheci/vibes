@@ -21,50 +21,30 @@ retry() {
   done
 }
 
-# Use GitHub PAT if available to avoid rate limits.
-GH_API_HEADERS=(-H "Accept: application/vnd.github+json" -H "User-Agent: vibes-bluebuild")
-if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-  GH_API_HEADERS+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
-elif [[ -n "${GH_PAT:-}" ]]; then
-  GH_API_HEADERS+=(-H "Authorization: Bearer ${GH_PAT}")
-fi
-
+# Use curl + jq to fetch latest release asset URLs from GitHub.
+# Avoids Python heredocs which can break in restricted BlueBuild container envs.
 gh_asset_url() {
   local repo="$1" pattern="$2"
-  python3 - "$repo" "$pattern" <<'PY'
-import json, re, sys, urllib.request
-repo, pattern = sys.argv[1], sys.argv[2]
-headers = {
-    "Accept": "application/vnd.github+json",
-    "User-Agent": "vibes-bluebuild",
-}
-# Forward auth from environment if present
-token = None
-for env in ("GITHUB_TOKEN", "GH_PAT"):
-    if sys.environ.get(env):
-        token = sys.environ[env]
-        break
-if token:
-    headers["Authorization"] = f"Bearer {token}"
-req = urllib.request.Request(
-    f"https://api.github.com/repos/{repo}/releases/latest",
-    headers=headers,
-)
-try:
-    with urllib.request.urlopen(req, timeout=60) as r:
-        data = json.load(r)
-except urllib.error.HTTPError as e:
-    print(f"GitHub API error: {e.code} {e.reason}", file=sys.stderr)
-    sys.exit(1)
-rx = re.compile(pattern, re.I)
-for asset in data.get("assets", []):
-    name = asset.get("name", "")
-    if rx.search(name):
-        print(asset["browser_download_url"])
-        sys.exit(0)
-print(f"No asset matching {pattern!r} in {repo} latest release", file=sys.stderr)
-sys.exit(1)
-PY
+  local api_url="https://api.github.com/repos/${repo}/releases/latest"
+  local headers=(-H "Accept: application/vnd.github+json" -H "User-Agent: vibes-bluebuild")
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    headers+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+  elif [[ -n "${GH_PAT:-}" ]]; then
+    headers+=(-H "Authorization: Bearer ${GH_PAT}")
+  fi
+  local assets_json
+  assets_json="$(curl -sSL "${headers[@]}" "$api_url" | jq -c '.assets // []')"
+  if [[ -z "$assets_json" || "$assets_json" == "null" ]]; then
+    echo "ERROR: failed to fetch release assets for ${repo}" >&2
+    return 1
+  fi
+  local url
+  url="$(echo "$assets_json" | jq -r --arg pattern "$pattern" '[.[] | select(.name | test($pattern; "i"))] | first | .browser_download_url // empty')"
+  if [[ -z "$url" ]]; then
+    echo "ERROR: no asset matching pattern '${pattern}' in ${repo} latest release" >&2
+    return 1
+  fi
+  echo "$url"
 }
 
 install_latest_rpm() {
@@ -147,6 +127,9 @@ Type=Application
 Categories=Development;Science;
 StartupNotify=true
 EOFDESKTOP
+
+# Vicinae AppImage (RPM excluded on Bazzite due to mesa-libEGL dependency conflict).
+install_latest_appimage "vicinaehq/vicinae" 'Vicinae-x86_64\.AppImage$' "vicinae" "Vicinae" "Raycast-inspired launcher" "Utility;"
 
 # opencode CLI latest. Installer writes the binary to /usr/local/bin through OPENCODE_INSTALL_DIR.
 retry bash -c 'curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=/usr/bin bash'

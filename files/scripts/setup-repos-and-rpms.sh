@@ -146,13 +146,10 @@ install_available \
   wireplumber pipewire pipewire-utils pipewire-alsa pipewire-pulseaudio pipewire-jack-audio-connection-kit \
   mangohud gamescope
 
-# Vicinae from Terra (Bazzite already carries Terra; enabled above).
-install_available vicinae || {
-  echo "WARN: vicinae not available from Terra; falling back to COPR quadratech188/vicinae" >&2
-  add_copr quadratech188/vicinae || add_copr scottames/vicinae || true
-  retry "${DNF[@]}" makecache || true
-  install_available vicinae || true
-}
+  # Vicinae from Terra (Bazzite already carries Terra; enabled above).
+  # NOTE: Terra's vicinae RPM depends on qt6-qtbase-gui -> mesa-libEGL,
+  # which is excluded on Bazzite. Skip RPM install here; AppImage used instead.
+  # install_available vicinae || true
 
 # Brave + uBlock Origin policy. This gives "Brave + Origin" behavior without mutating user profiles.
 install -d -m 0755 /etc/brave/policies/managed /etc/chromium/policies/managed
