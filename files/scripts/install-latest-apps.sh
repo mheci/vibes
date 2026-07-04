@@ -81,6 +81,26 @@ StartupNotify=true
 EOFDESKTOP
 }
 
+
+# Zed latest official Linux tarball.
+install -d -m 0755 /opt/zed /usr/local/bin /usr/share/applications /usr/share/icons/hicolor
+retry curl -fL --retry 4 --retry-delay 10 -o /tmp/zed-linux-x86_64.tar.gz \
+  'https://zed.dev/api/releases/stable/latest/zed-linux-x86_64.tar.gz'
+rm -rf /tmp/zed.app
+mkdir -p /tmp/zed.app
+tar -xzf /tmp/zed-linux-x86_64.tar.gz -C /tmp/zed.app --strip-components=1
+rm -rf /opt/zed/*
+cp -a /tmp/zed.app/. /opt/zed/
+ln -sf /opt/zed/bin/zed /usr/local/bin/zed
+if [[ -f /opt/zed/share/applications/dev.zed.Zed.desktop ]]; then
+  sed 's#Exec=zed#Exec=/usr/local/bin/zed#g' /opt/zed/share/applications/dev.zed.Zed.desktop \
+    >/usr/share/applications/dev.zed.Zed.desktop
+fi
+if [[ -d /opt/zed/share/icons/hicolor ]]; then
+  cp -a /opt/zed/share/icons/hicolor/. /usr/share/icons/hicolor/
+fi
+rm -rf /tmp/zed.app /tmp/zed-linux-x86_64.tar.gz
+
 # Latest GitHub-release RPM/AppImage applications.
 install_latest_rpm "anomalyco/opencode" 'opencode-desktop-linux-(amd64|x86_64).*\.rpm$' "opencode-desktop"
 install_latest_rpm "Heroic-Games-Launcher/HeroicGamesLauncher" 'Heroic-.*linux.*(x86_64|x64|amd64).*\.rpm$' "heroic"

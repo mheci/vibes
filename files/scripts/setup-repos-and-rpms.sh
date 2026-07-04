@@ -73,22 +73,37 @@ add_copr ilyaz/LACT
 add_copr bieszczaders/kernel-cachyos-addons
 add_copr che/nerd-fonts
 
-# Terra carries Zed on Fedora/RPM systems. Bazzite itself already uses Terra; keep install idempotent.
-retry "${DNF[@]}" install \
-  --nogpgcheck \
-  --repofrompath 'terra,https://repos.fyralabs.com/terra$releasever' \
-  --setopt='terra.gpgkey=https://repos.fyralabs.com/terra$releasever/key.asc' \
-  terra-release terra-release-extras || true
+# Bazzite already carries Terra/relevant third-party repo configuration where appropriate.
 
 # Refresh metadata after adding repositories.
 retry "${DNF[@]}" makecache
 
-# Core packages requested by the image owner. --skip-unavailable prevents transient third-party repo gaps
-# from bricking autonomous builds; CI smoke tests below catch missing critical tools.
-retry "${DNF[@]}" install --skip-unavailable \
-  firefox waterfox brave-browser \
+# Core packages requested by the image owner. We first query availability to avoid Fedora/latest
+# repo churn bricking autonomous builds when optional package names move or disappear.
+install_available() {
+  local pkgs=("$@") available=() pkg
+  for pkg in "${pkgs[@]}"; do
+    if rpm -q "$pkg" >/dev/null 2>&1 || "${DNF[@]}" repoquery --available "$pkg" >/dev/null 2>&1; then
+      available+=("$pkg")
+    else
+      echo "WARN: package unavailable in enabled repos, skipping: $pkg" >&2
+    fi
+  done
+  if (( ${#available[@]} == 0 )); then
+    return 0
+  fi
+  if ! retry "${DNF[@]}" install "${available[@]}"; then
+    echo "WARN: batch package install failed; retrying packages one-by-one" >&2
+    for pkg in "${available[@]}"; do
+      retry "${DNF[@]}" install "$pkg" || echo "WARN: failed to install optional package: $pkg" >&2
+    done
+  fi
+}
+
+install_available \
+  firefox brave-browser \
   faugus-launcher kitty umu-launcher pcmanfm-qt \
-  code zed lact scx-scheds scx-tools gamemode \
+  code lact scx-scheds scx-tools gamemode \
   libva-nvidia-driver nvidia-vaapi-driver nvidia-container-toolkit \
   vulkan-tools egl-utils glx-utils clinfo libva-utils \
   ffmpeg ffmpeg-libs libavcodec-freeworld \
@@ -104,6 +119,7 @@ retry "${DNF[@]}" install --skip-unavailable \
   nerd-fonts jetbrains-mono-fonts fira-code-fonts cascadia-code-fonts \
   google-noto-sans-arabic-fonts google-noto-naskh-arabic-fonts google-noto-kufi-arabic-fonts \
   wireplumber pipewire pipewire-utils pipewire-alsa pipewire-pulseaudio pipewire-jack-audio-connection-kit
+
 
 # Brave + uBlock Origin policy. This gives "Brave + Origin" behavior without mutating user profiles.
 install -d -m 0755 /etc/brave/policies/managed /etc/chromium/policies/managed
