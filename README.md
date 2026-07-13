@@ -7,7 +7,7 @@ Current base: `ghcr.io/ublue-os/bazzite-nvidia-open:latest` → published as `gh
 ## What's inside
 
 - **Base**: Bazzite NVIDIA Open (latest)
-- **Browsers**: Waterfox (latest official upstream tarball), Brave Origin (RPM with uBlock Origin policy), Firefox (RPM replacing Flatpak)
+- **Browsers**: Brave Origin (RPM with uBlock Origin policy), Firefox (official Mozilla RPM replacing Flatpak)
 - **Development**: VS Code, Zed, opencode CLI + Desktop, Heroic Games Launcher
 - **AI**: LM Studio, Vicinae launcher
 - **Gaming**: Steam + steam-devices, Faugus Launcher, Heroic, Lutris, umu-launcher, MangoHud, GameScope, Proton helpers, scx LAVD scheduler (performance mode)

@@ -129,7 +129,6 @@ require_rpm steam-devices
 require_rpm_or_path darkly /usr/bin/darkly-settings6
 require_rpm_or_path heroic /usr/bin/heroic
 require_rpm_or_path lutris /usr/bin/lutris
-require_rpm_or_path waterfox /usr/bin/waterfox
 require_rpm_or_path WhiteSur-cursors /usr/share/icons/WhiteSur-cursors
 
 echo "=== Extract package manifest ==="

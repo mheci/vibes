@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if command -v dnf5 >/dev/null 2>&1; then
+if command -v dnf4 >/dev/null 2>&1; then
+  DNF=(dnf4 -y)
+elif command -v dnf >/dev/null 2>&1; then
+  DNF=(dnf -y)
+elif command -v dnf5 >/dev/null 2>&1; then
   DNF=(dnf5 -y)
 else
-  DNF=(dnf -y)
+  printf 'ERROR: neither dnf4, dnf, nor dnf5 is available\n' >&2
+  exit 1
 fi
 
 log() {
@@ -140,53 +145,6 @@ StartupNotify=true
 EOFDESKTOP
 }
 
-install_waterfox() {
-  local release_json version workdir archive base_url
-  release_json="$(github_latest_release_json 'BrowserWorks/Waterfox')"
-  version="$(jq -r '.tag_name // empty' <<<"$release_json")"
-  [[ -n "$version" ]] || die 'failed to resolve latest Waterfox release version'
-
-  workdir="$(mktemp -d)"
-  archive="waterfox-${version}.tar.bz2"
-  base_url="https://cdn.waterfox.com/waterfox/releases/${version}/Linux_x86_64"
-
-  log "Installing latest Waterfox ${version} from official CDN"
-  retry curl -fL --retry 4 --retry-delay 10 -o "$workdir/$archive" "${base_url}/${archive}"
-  retry curl -fL --retry 4 --retry-delay 10 -o "$workdir/${archive}.sha512" "${base_url}/${archive}.sha512"
-  (cd "$workdir" && sha512sum -c "${archive}.sha512")
-  tar -xjf "$workdir/$archive" -C "$workdir"
-
-  rm -rf /usr/lib/waterfox
-  mv "$workdir/waterfox" /usr/lib/waterfox
-
-  cat >/usr/bin/waterfox <<'EOFAPP'
-#!/usr/bin/env bash
-exec /usr/lib/waterfox/waterfox "$@"
-EOFAPP
-  chmod 0755 /usr/bin/waterfox
-
-  install -d -m 0755 /usr/share/applications /usr/share/icons/hicolor/128x128/apps
-  cat >/usr/share/applications/waterfox.desktop <<'EOFDESKTOP'
-[Desktop Entry]
-Name=Waterfox
-Comment=Privacy-focused browser
-Exec=/usr/bin/waterfox %u
-Terminal=false
-Type=Application
-Categories=Network;WebBrowser;
-Icon=waterfox
-StartupNotify=true
-MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
-EOFDESKTOP
-
-  if [[ -f /usr/lib/waterfox/browser/chrome/icons/default/default128.png ]]; then
-    install -m 0644 /usr/lib/waterfox/browser/chrome/icons/default/default128.png \
-      /usr/share/icons/hicolor/128x128/apps/waterfox.png
-  fi
-
-  rm -rf "$workdir"
-}
-
 install_zed() {
   install -d -m 0755 /usr/lib/zed /usr/bin /usr/share/applications /usr/share/icons/hicolor
   retry curl -fL --retry 4 --retry-delay 10 -o /tmp/zed-linux-x86_64.tar.gz \
@@ -289,7 +247,6 @@ assert_commands_present() {
     opencode
     scx_lavd
     vicinae
-    waterfox
     zed
   )
 
@@ -314,7 +271,6 @@ install_latest_rpm 'Heroic-Games-Launcher/HeroicGamesLauncher' 'Heroic-.*linux.*
 install_lmstudio
 install_latest_appimage 'vicinaehq/vicinae' 'Vicinae.*x86_64\.AppImage$' 'vicinae' 'Vicinae' 'Raycast-inspired launcher' 'Utility;'
 install_opencode_cli
-install_waterfox
 install_rnnoise
 install_bpftune
 assert_commands_present

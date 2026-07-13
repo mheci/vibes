@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if command -v dnf5 >/dev/null 2>&1; then
+if command -v dnf4 >/dev/null 2>&1; then
+  DNF=(dnf4 -y)
+elif command -v dnf >/dev/null 2>&1; then
+  DNF=(dnf -y)
+elif command -v dnf5 >/dev/null 2>&1; then
   DNF=(dnf5 -y)
 else
-  DNF=(dnf -y)
+  printf 'ERROR: neither dnf4, dnf, nor dnf5 is available\n' >&2
+  exit 1
 fi
 
 log() {

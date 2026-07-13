@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if command -v dnf5 >/dev/null 2>&1; then
+if command -v dnf4 >/dev/null 2>&1; then
+  DNF=(dnf4 -y)
+elif command -v dnf >/dev/null 2>&1; then
+  DNF=(dnf -y)
+elif command -v dnf5 >/dev/null 2>&1; then
   DNF=(dnf5 -y)
 else
-  DNF=(dnf -y)
+  printf 'ERROR: neither dnf4, dnf, nor dnf5 is available\n' >&2
+  exit 1
 fi
 
 log() {
@@ -56,6 +61,37 @@ enable_repo_if_present() {
   fi
 }
 
+import_gpg_key_url() {
+  local key_url="$1" tmp
+  case "$key_url" in
+    http://*|https://*)
+      tmp="$(mktemp)"
+      retry curl -fsSL -o "$tmp" "$key_url"
+      rpm --import "$tmp"
+      rm -f "$tmp"
+      ;;
+    file://*)
+      rpm --import "${key_url#file://}"
+      ;;
+    *)
+      rpm --import "$key_url"
+      ;;
+  esac
+}
+
+import_repo_gpg_keys() {
+  local repo_file="$1" line key_fragment key_url
+  [[ -f "$repo_file" ]] || return 0
+
+  while IFS= read -r line; do
+    [[ "$line" == gpgkey=* ]] || continue
+    key_fragment="${line#gpgkey=}"
+    for key_url in $key_fragment; do
+      import_gpg_key_url "$key_url"
+    done
+  done < "$repo_file"
+}
+
 add_copr() {
   local copr="$1"
   log "Enabling COPR: ${copr}"
@@ -100,6 +136,18 @@ install_optional_packages() {
       done
     fi
   fi
+}
+
+install_first_available_package() {
+  local pkg
+  for pkg in "$@"; do
+    if package_available_or_installed "$pkg"; then
+      retry "${DNF[@]}" install "$pkg"
+      return 0
+    fi
+  done
+  warn "none of the alternative packages were available: $*"
+  return 0
 }
 
 remove_if_installed() {
@@ -148,15 +196,22 @@ retry curl -fsSL -o /etc/yum.repos.d/terra.repo \
 
 # DNF plugins are required for config-manager and COPR enablement.
 install_required_packages jq curl git
-if command -v dnf5 >/dev/null 2>&1; then
-  install_required_packages dnf5-plugins
-else
-  install_required_packages dnf-plugins-core
-fi
+case "${DNF[0]}" in
+  dnf5)
+    install_required_packages dnf5-plugins
+    ;;
+  *)
+    install_required_packages dnf-plugins-core
+    ;;
+esac
 
 # Terra release packages should be installed from Terra itself so repo migrations are handled upstream.
 retry "${DNF[@]}" install --nogpgcheck terra-release
 install_optional_packages terra-release-extras
+for repo_file in /etc/yum.repos.d/terra*.repo; do
+  [[ -e "$repo_file" ]] || continue
+  import_repo_gpg_keys "$repo_file"
+done
 enable_repo_if_present terra
 enable_repo_if_present terra-extras
 
@@ -182,13 +237,14 @@ remove_if_installed openh264 mozilla-openh264 gstreamer1-plugin-openh264
 retry "${DNF[@]}" install firefox
 
 # The image already tracks the latest Bazzite NVIDIA Open base. These layered packages ensure
-# the matching userspace and rebuild tooling are present as the base updates.
+# the matching userspace and rebuild tooling are present as the base updates, while tolerating
+# upstream package renames across Fedora/Bazzite revisions.
 install_required_packages \
-  akmod-nvidia-open \
   nvidia-container-toolkit \
   nvidia-modprobe \
   nvidia-settings
-install_optional_packages nvidia-open-dkms nvidia-open-kmod nvidia-vaapi-driver
+install_first_available_package akmod-nvidia-open nvidia-open-dkms nvidia-open-kmod
+install_optional_packages nvidia-vaapi-driver
 
 # Core desktop, gaming, media, codec, theming, and build dependencies.
 install_required_packages \

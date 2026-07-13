@@ -85,7 +85,6 @@ CRITICAL_BINS=(
   steam
   umu-run
   vicinae
-  waterfox
   zed
 )
 for bin in "${CRITICAL_BINS[@]}"; do
