@@ -20,7 +20,7 @@ die() {
   exit 1
 }
 
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 on_error() {
   local exit_code=$?
   local line_no=$1
