@@ -63,18 +63,27 @@ enable_repo_if_present() {
 
 import_gpg_key_url() {
   local key_url="$1" tmp
-  case "$key_url" in
+  local releasever basearch expanded
+  releasever="$(rpm -E %fedora)"
+  basearch="$(rpm -E %_arch)"
+  expanded="$key_url"
+  expanded="${expanded//\$releasever/$releasever}"
+  expanded="${expanded//\$basearch/$basearch}"
+  expanded="${expanded//\${releasever}/$releasever}"
+  expanded="${expanded//\${basearch}/$basearch}"
+
+  case "$expanded" in
     http://*|https://*)
       tmp="$(mktemp)"
-      retry curl -fsSL -o "$tmp" "$key_url"
+      retry curl -fsSL -o "$tmp" "$expanded"
       rpm --import "$tmp"
       rm -f "$tmp"
       ;;
     file://*)
-      rpm --import "${key_url#file://}"
+      rpm --import "${expanded#file://}"
       ;;
     *)
-      rpm --import "$key_url"
+      rpm --import "$expanded"
       ;;
   esac
 }
