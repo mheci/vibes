@@ -3,7 +3,12 @@
 version: 1
 # image will be published to ghcr.io/mheci/vibes
 name: vibes
-description: Bazzite NVIDIA Open gaming, media, and AI workstation image built with BlueBuild.
+description: Bazzite NVIDIA Open gaming, media, AI workstation, and KDE theming image built with BlueBuild.
+
+# Publish builds to a non-user-facing candidate tag first.
+# The GitHub Actions pipeline promotes only validated digests to stable/latest.
+alt-tags:
+  - candidate
 
 # Track the latest Bazzite NVIDIA-open image as requested.
 base-image: ghcr.io/ublue-os/bazzite-nvidia-open
@@ -14,6 +19,7 @@ modules:
     scripts:
       - setup-repos-and-rpms.sh
       - install-latest-apps.sh
+      - install-themes-and-assets.sh
 
   - type: default-flatpaks
     configurations:

@@ -10,10 +10,11 @@ Current base: `ghcr.io/ublue-os/bazzite-nvidia-open:latest` → published as `gh
 - **Browsers**: Waterfox (RPM + Flatpak), Brave Origin (RPM with uBlock Origin policy), Firefox (RPM replacing Flatpak)
 - **Development**: VS Code, Zed, opencode CLI + Desktop, Heroic Games Launcher
 - **AI**: LM Studio, Vicinae launcher
-- **Gaming**: Faugus Launcher, umu-launcher, LACT, MangoHud, GameScope, scx LAVD scheduler (performance mode)
+- **Gaming**: Steam + steam-devices, Faugus Launcher, Heroic, Lutris, umu-launcher, MangoHud, GameScope, Proton helpers, scx LAVD scheduler (performance mode)
 - **Audio**: High-quality PipeWire + WirePlumber configs, RNNoise stereo noise suppression
-- **GPU**: NVIDIA Open kernel modules (always latest), VAAPI/VDPAU/NVD acceleration defaults
-- **System**: bpftune enabled, comprehensive codec & thumbnail support, nerd fonts, Arabic + English spellcheck
+- **GPU**: Latest Bazzite NVIDIA Open base plus layered NVIDIA userspace / akmod tooling, VAAPI/VDPAU/NVD acceleration defaults
+- **Themes**: Darkly Qt + GTK, Beauty Plasma Themes, macOsTahoeKdeTheme bundle, WhiteSur KDE, McMojave KDE, WhiteSur cursors, macOS-style cursor variants
+- **System**: Terra stable + extras configured, comprehensive codec & thumbnail support, development fonts, Arabic + English spellcheck
 
 ## Installation
 
@@ -39,17 +40,17 @@ To rebase an existing atomic Fedora installation to the latest build:
   systemctl reboot
   ```
 
-The `latest` tag will automatically point to the latest build. That build will still always use the Fedora version specified in `recipes/recipe.yml`, so you won't get accidentally updated to the next major version.
+Validated releases are promoted to `latest` and `stable` only after the full build, smoke, security, and KVM boot pipeline passes. In-progress builds publish only to the internal `candidate` tag. The image still follows the Fedora version specified in `recipes/recipe.yml`, so you won't get accidentally updated to the next major version.
 
 ## Validation
 
-The pipeline is intentionally split into three layers so PR checks stay fast while release validation stays meaningful:
+The pipeline is intentionally split into three layers so PR checks stay fast while release validation stays strict:
 
 - **Repository CI (`repo-ci`)**: runs on pushes and pull requests to validate workflow YAML, shell syntax, and action wiring without needing signing secrets.
-- **Release pipeline (`bluebuild`)**: builds and publishes the image, resolves the pushed digest, runs `bootc container lint`, performs filesystem/package smoke checks, and uploads a package manifest artifact.
-- **Deep boot validation (`validate-image`)**: scheduled/manual qcow2 conversion plus QEMU/KVM boot with SSH-based in-VM QA for kernel, systemd, GPU, audio, and package health.
+- **Release pipeline (`bluebuild`)**: builds a non-user-facing `candidate` image, resolves the immutable digest, runs `bootc container lint`, performs filesystem/package/theme smoke checks, runs Trivy SARIF + advisory reporting, boots the image in QEMU/KVM, executes in-VM QA, and only then promotes the exact validated digest to `stable` and `latest`.
+- **Continuous revalidation (`validate-image`)**: scheduled/manual smoke + Trivy + KVM revalidation against `stable` (or any explicitly supplied image reference).
 
-Security scanning is handled in the release workflow with Trivy SARIF upload, while the heavier KVM integration test is isolated from normal publish runs to keep the production pipeline reliable.
+This means users never see a freshly built but untested tag, and every published update must survive container checks, security advisory generation, and a full virtual-machine boot before promotion.
 
 ## ISO
 
@@ -57,7 +58,7 @@ If building on Fedora Atomic, you can generate an offline ISO with the instructi
 
 ## Verification
 
-These images are signed with [Sigstore](https://www.sigstore.dev/)'s [cosign](https://github.com/sigstore/cosign). You can verify the signature by downloading the `cosign.pub` file from this repo and running the following command:
+These images are signed with [Sigstore](https://www.sigstore.dev/)'s [cosign](https://github.com/sigstore/cosign). Promoted builds are available as `stable`, `latest`, and immutable `sha-<commit>` tags. You can verify the signature by downloading the `cosign.pub` file from this repo and running the following command:
 
 ```bash
 cosign verify --key cosign.pub ghcr.io/mheci/vibes

@@ -88,25 +88,48 @@ podman run --rm --privileged --pull=never --entrypoint /usr/bin/bootc "$IMAGE" c
 
 echo "=== Filesystem smoke checks ==="
 require_path /usr/sbin/bpftune
-require_path /usr/bin/kitty
 require_path /usr/bin/code
-require_path /usr/bin/zed
-require_path /usr/bin/scx_lavd
+require_path /usr/bin/gamescope
+require_path /usr/bin/kitty
+require_path /usr/bin/mangohud
 require_path /usr/bin/opencode
+require_path /usr/bin/scx_lavd
+require_path /usr/bin/steam
+require_path /usr/bin/umu-run
+require_path /usr/bin/zed
 require_path /usr/lib/vibes-apps/lmstudio/LM_Studio.AppImage
 require_path /usr/lib64/ladspa/librnnoise_ladspa.so
 require_path /etc/pipewire/pipewire.conf.d/99-input-denoising.conf
-require_path /etc/scx_loader/config.toml
 require_path /etc/profile.d/90-vibes-nvidia-accel.sh
+require_path /etc/scx_loader/config.toml
 require_path /etc/systemd/system/multi-user.target.wants/bpftune.service
+require_path /etc/yum.repos.d/terra.repo
+require_path /usr/share/color-schemes/Darkly.colors
+require_path /usr/share/themes/Darkly
+require_path /usr/share/vibes/themes-manifest.txt
+require_path /usr/share/plasma/look-and-feel/Beauty-Color-Global-6
+require_path /usr/share/plasma/look-and-feel/com.github.ddc.DDCmacOsTahoe-dark
+require_path /usr/share/plasma/look-and-feel/com.github.vinceliuice.McMojave
+require_path /usr/share/plasma/look-and-feel/com.github.vinceliuice.WhiteSur
+require_path /usr/share/icons/DDCmacOsMonterey-cursor-white
+require_path /usr/share/icons/DDCmacOsTahoe-cursor-dark
+require_path /usr/share/icons/DDCmacOsTahoe-cursor-mixed
+require_path /usr/share/icons/DDCmacOsTahoe-cursor-white
+require_path /usr/share/icons/WhiteSur-cursors
 require_any_path \
   /etc/systemd/system/multi-user.target.wants/scx_loader.service \
   /etc/systemd/system/multi-user.target.wants/scx-lavd.service
-warn_if_missing /usr/bin/pcmanfm-qt
 warn_if_missing /usr/bin/lact
+warn_if_missing /usr/bin/pcmanfm-qt
 
-require_rpm_or_path brave-origin /usr/bin/brave-origin
+require_rpm brave-origin
 require_rpm firefox
+require_rpm steam-devices
+require_rpm_or_path darkly /usr/bin/darkly-settings6
+require_rpm_or_path heroic /usr/bin/heroic
+require_rpm_or_path lutris /usr/bin/lutris
+require_rpm_or_path waterfox /usr/bin/waterfox
+require_rpm_or_path WhiteSur-cursors /usr/share/icons/WhiteSur-cursors
 
 echo "=== Extract package manifest ==="
 run_in_image /usr/bin/rpm -qa --qf '%{NAME}\n' | sort > "$MANIFEST_PATH"

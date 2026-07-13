@@ -2,7 +2,7 @@ name: bluebuild
 
 on:
   schedule:
-    - cron: "00 06 * * *" # build at 06:00 UTC every day
+    - cron: "00 06 * * *"
   push:
     branches:
       - main
@@ -16,12 +16,12 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  IMAGE_TAG: latest
+  CANDIDATE_TAG: candidate
 
 jobs:
   build:
-    name: Build and publish image
-    if: ${{ github.ref == 'refs/heads/main' }}
+    name: Build candidate image
+    if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -29,7 +29,7 @@ jobs:
       packages: write
       id-token: write
     steps:
-      - name: Build Custom Image
+      - name: Build candidate image
         uses: blue-build/github-action@v1.12.0
         with:
           recipe: recipe.yml
@@ -42,19 +42,20 @@ jobs:
           verify_install: true
 
   resolve-image:
-    name: Resolve published image digest
+    name: Resolve candidate digest
     runs-on: ubuntu-latest
     needs: build
     permissions:
       contents: read
       packages: read
     outputs:
-      tagged_image: ${{ steps.resolve.outputs.tagged_image }}
+      candidate_image: ${{ steps.resolve.outputs.candidate_image }}
       image: ${{ steps.resolve.outputs.image }}
       digest: ${{ steps.resolve.outputs.digest }}
     steps:
       - name: Install skopeo
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y skopeo jq
 
@@ -62,25 +63,27 @@ jobs:
         id: resolve
         run: |
           set -euo pipefail
-          TAGGED_IMAGE="ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG}"
-          DIGEST="$(skopeo inspect "docker://${TAGGED_IMAGE}" | jq -r '.Digest')"
+          CANDIDATE_IMAGE="ghcr.io/${GITHUB_REPOSITORY}:${CANDIDATE_TAG}"
+          DIGEST="$(skopeo inspect "docker://${CANDIDATE_IMAGE}" | jq -r '.Digest')"
           if [[ -z "${DIGEST}" || "${DIGEST}" == "null" ]]; then
-            echo "ERROR: failed to resolve digest for ${TAGGED_IMAGE}" >&2
+            echo "ERROR: failed to resolve digest for ${CANDIDATE_IMAGE}" >&2
             exit 1
           fi
 
           {
-            echo "tagged_image=${TAGGED_IMAGE}"
+            echo "candidate_image=${CANDIDATE_IMAGE}"
             echo "image=ghcr.io/${GITHUB_REPOSITORY}@${DIGEST}"
             echo "digest=${DIGEST}"
           } >> "$GITHUB_OUTPUT"
-          echo "Validated image: ghcr.io/${GITHUB_REPOSITORY}@${DIGEST}"
+
+          echo "Candidate image: ${CANDIDATE_IMAGE}"
+          echo "Validated digest: ${DIGEST}"
 
   smoke-validation:
     name: Smoke validation
     runs-on: ubuntu-latest
     needs: resolve-image
-    timeout-minutes: 25
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: read
@@ -90,6 +93,7 @@ jobs:
 
       - name: Install validation tools
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y skopeo podman jq
 
@@ -97,6 +101,7 @@ jobs:
         env:
           IMAGE: ${{ needs.resolve-image.outputs.image }}
         run: |
+          set -euo pipefail
           echo "=== Image Manifest ==="
           skopeo inspect "docker://${IMAGE}" | jq '{Name, Digest, Created, Labels}'
           echo "=== Image Tags ==="
@@ -116,10 +121,10 @@ jobs:
           if-no-files-found: error
 
   security-scan:
-    name: Security scan
+    name: Security advisory scan
     runs-on: ubuntu-latest
     needs: resolve-image
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
       packages: read
@@ -128,7 +133,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Scan image with Trivy
+      - name: Run Trivy SARIF scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ needs.resolve-image.outputs.image }}
@@ -139,16 +144,154 @@ jobs:
           timeout: 20m
           exit-code: "0"
 
+      - name: Run Trivy advisory report
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ needs.resolve-image.outputs.image }}
+          format: table
+          output: trivy-advisory.txt
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+          timeout: 20m
+          exit-code: "0"
+          skip-setup-trivy: true
+
       - name: Upload Trivy SARIF
         if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
 
-      - name: Upload Trivy results
-        if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
+      - name: Upload Trivy artifacts
+        if: ${{ always() && (hashFiles('trivy-results.sarif') != '' || hashFiles('trivy-advisory.txt') != '') }}
         uses: actions/upload-artifact@v7
         with:
-          name: trivy-results
-          path: trivy-results.sarif
+          name: trivy-artifacts
+          path: |
+            trivy-results.sarif
+            trivy-advisory.txt
           if-no-files-found: error
+
+      - name: Add advisory summary
+        if: ${{ always() && hashFiles('trivy-advisory.txt') != '' }}
+        run: |
+          {
+            echo "## Trivy advisory"
+            echo
+            echo '```text'
+            sed -n '1,200p' trivy-advisory.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  kvm-boot-validation:
+    name: KVM qcow2 boot + in-VM QA
+    runs-on: ubuntu-latest
+    needs: resolve-image
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install KVM and bootc image tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y podman qemu-system-x86 qemu-utils ovmf jq openssh-client
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm || true
+
+      - name: Boot image in QEMU/KVM and run automated QA
+        env:
+          IMAGE: ${{ needs.resolve-image.outputs.image }}
+          WORKDIR: ${{ github.workspace }}/kvm-boot-work
+          TIMEOUT_SECONDS: "900"
+          MEMORY_MB: "8192"
+          VCPUS: "4"
+        run: scripts/ci/kvm-boot-test.sh
+
+      - name: Upload KVM boot logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kvm-boot-logs
+          path: |
+            kvm-boot-work/*.log
+            kvm-boot-work/vibes-qa/**
+          if-no-files-found: warn
+
+  promote:
+    name: Promote validated image
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    needs:
+      - resolve-image
+      - smoke-validation
+      - security-scan
+      - kvm-boot-validation
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install promotion tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y skopeo jq
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v4
+
+      - name: Promote digest to stable tags
+        env:
+          IMAGE: ${{ needs.resolve-image.outputs.image }}
+          DIGEST: ${{ needs.resolve-image.outputs.digest }}
+          REGISTRY_AUTH: ${{ github.actor }}:${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA::12}"
+          tags=(latest stable "sha-${SHORT_SHA}" "run-${GITHUB_RUN_NUMBER}")
+
+          for tag in "${tags[@]}"; do
+            echo "Promoting ${IMAGE} -> ghcr.io/${GITHUB_REPOSITORY}:${tag}"
+            skopeo copy \
+              --all \
+              --dest-creds "$REGISTRY_AUTH" \
+              "docker://${IMAGE}" \
+              "docker://ghcr.io/${GITHUB_REPOSITORY}:${tag}"
+          done
+
+          for tag in latest stable; do
+            resolved="$(skopeo inspect "docker://ghcr.io/${GITHUB_REPOSITORY}:${tag}" | jq -r '.Digest')"
+            if [[ "$resolved" != "$DIGEST" ]]; then
+              echo "ERROR: promoted tag ${tag} resolved to ${resolved}, expected ${DIGEST}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Verify promoted image signature
+        run: |
+          set -euo pipefail
+          cosign verify --key cosign.pub "ghcr.io/${GITHUB_REPOSITORY}:latest"
+          cosign verify --key cosign.pub "ghcr.io/${GITHUB_REPOSITORY}:stable"
+
+      - name: Publish release summary
+        env:
+          DIGEST: ${{ needs.resolve-image.outputs.digest }}
+        run: |
+          {
+            echo "## Validated release promoted"
+            echo
+            echo "- Candidate: \`ghcr.io/${GITHUB_REPOSITORY}:${CANDIDATE_TAG}\`"
+            echo "- Latest: \`ghcr.io/${GITHUB_REPOSITORY}:latest\`"
+            echo "- Stable: \`ghcr.io/${GITHUB_REPOSITORY}:stable\`"
+            echo "- Immutable digest: \`ghcr.io/${GITHUB_REPOSITORY}@${DIGEST}\`"
+            echo "- Immutable SHA tag: \`ghcr.io/${GITHUB_REPOSITORY}:sha-${GITHUB_SHA::12}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

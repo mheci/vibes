@@ -21,6 +21,12 @@ retry() {
   done
 }
 
+set_repo_enabled() {
+  local repo_id="$1"
+  local state="$2"
+  "${DNF[@]}" config-manager setopt "${repo_id}.enabled=${state}" || true
+}
+
 add_copr() {
   local copr="$1"
   echo "Enabling COPR: ${copr}"
@@ -30,8 +36,31 @@ add_copr() {
   }
 }
 
-# Official Brave RPM repository (provides brave-origin and brave-browser).
+install_available() {
+  local pkgs=("$@") available=() pkg
+  for pkg in "${pkgs[@]}"; do
+    if rpm -q "$pkg" >/dev/null 2>&1 || "${DNF[@]}" repoquery --available "$pkg" >/dev/null 2>&1; then
+      available+=("$pkg")
+    else
+      echo "WARN: package unavailable in enabled repos, skipping: $pkg" >&2
+    fi
+  done
+
+  if (( ${#available[@]} == 0 )); then
+    return 0
+  fi
+
+  if ! retry "${DNF[@]}" install "${available[@]}"; then
+    echo "WARN: batch package install failed; retrying packages one-by-one without long retries" >&2
+    for pkg in "${available[@]}"; do
+      "${DNF[@]}" install "$pkg" || echo "WARN: failed to install optional package: $pkg" >&2
+    done
+  fi
+}
+
 install -d -m 0755 /etc/yum.repos.d
+
+# Official Brave RPM repository (provides brave-origin and brave-browser).
 cat >/etc/yum.repos.d/brave-browser.repo <<'REPO'
 [brave-browser]
 name=Brave Browser
@@ -56,7 +85,7 @@ gpgkey=https://packages.microsoft.com/keys/microsoft.asc
 skip_if_unavailable=True
 REPO
 
-# Waterfox RPM repo.
+# Waterfox RPM repository.
 cat >/etc/yum.repos.d/waterfox.repo <<'REPO'
 [waterfox]
 name=Waterfox
@@ -67,45 +96,28 @@ gpgkey=https://repo.waterfox.net/key.asc
 skip_if_unavailable=True
 REPO
 
-# Ensure DNF COPR/config-manager plugins are available.
+# Configure Terra from the official subatomic repo file so atomic installs stay aligned
+# with current upstream guidance. Keep the stable main repo and extras enabled. We do not
+# force Terra multimedia because upstream currently documents it as unstable/WIP.
+retry curl -fsSL -o /etc/yum.repos.d/terra.repo \
+  https://raw.githubusercontent.com/terrapkg/subatomic-repos/main/terra.repo
+retry "${DNF[@]}" install --nogpgcheck terra-release || true
+install_available terra-release-extras || true
+set_repo_enabled terra 1
+set_repo_enabled terra-extras 1
+
+# Ensure DNF plugins are available before further repo manipulation.
 retry "${DNF[@]}" install --skip-unavailable dnf5-plugins dnf-plugins-core || true
 
-# COPRs for requested/adjacent software.
+# COPRs and adjacent repos for image-specific software.
 add_copr faugus/faugus-launcher
 add_copr ilyaz/LACT
 add_copr bieszczaders/kernel-cachyos-addons
 add_copr che/nerd-fonts
 
-# Terra is already present on Bazzite; ensure it is enabled for vicinae and friends.
-if [[ -f /etc/yum.repos.d/terra.repo ]]; then
-  sed -i 's/^enabled=0/enabled=1/' /etc/yum.repos.d/terra.repo || true
-fi
-
 # Refresh metadata after adding repositories.
-"${DNF[@]}" config-manager setopt fedora-cisco-openh264.enabled=1 || true
+set_repo_enabled fedora-cisco-openh264 1
 retry "${DNF[@]}" makecache
-
-# Core packages requested by the image owner. We first query availability to avoid Fedora/latest
-# repo churn bricking autonomous builds when optional package names move or disappear.
-install_available() {
-  local pkgs=("$@") available=() pkg
-  for pkg in "${pkgs[@]}"; do
-    if rpm -q "$pkg" >/dev/null 2>&1 || "${DNF[@]}" repoquery --available "$pkg" >/dev/null 2>&1; then
-      available+=("$pkg")
-    else
-      echo "WARN: package unavailable in enabled repos, skipping: $pkg" >&2
-    fi
-  done
-  if (( ${#available[@]} == 0 )); then
-    return 0
-  fi
-  if ! retry "${DNF[@]}" install "${available[@]}"; then
-    echo "WARN: batch package install failed; retrying packages one-by-one without long retries" >&2
-    for pkg in "${available[@]}"; do
-      "${DNF[@]}" install "$pkg" || echo "WARN: failed to install optional package: $pkg" >&2
-    done
-  fi
-}
 
 # Remove flatpak Firefox if present so the RPM replacement is the only Firefox.
 if command -v flatpak >/dev/null 2>&1; then
@@ -113,43 +125,178 @@ if command -v flatpak >/dev/null 2>&1; then
 fi
 
 # Firefox RPM can conflict with preinstalled OpenH264 providers on atomic bases; install it first
-# without those providers present, then install codecs opportunistically below.
+# without those providers present, then install codecs and the rest of the stack afterwards.
 "${DNF[@]}" remove --no-autoremove openh264 mozilla-openh264 gstreamer1-plugin-openh264 || true
 retry "${DNF[@]}" install firefox || retry "${DNF[@]}" install --setopt=install_weak_deps=False firefox
 
-# Install Waterfox from its RPM repo (configured above).
+# Direct repositories / latest channels.
 install_available waterfox || true
 
-# Always pull the latest NVIDIA Open kernel module tooling so akmods rebuilds stay current.
-# Bazzite base already ships the open driver; this ensures the akmod layer is present for updates.
-install_available akmod-nvidia-open nvidia-open-dkms nvidia-open-kmod || true
+# Latest NVIDIA user space and akmods. The image already tracks the latest Bazzite NVIDIA Open
+# base; these packages ensure the layered userspace and rebuild tooling stay current as well.
+install_available \
+  akmod-nvidia-open \
+  nvidia-open-dkms \
+  nvidia-open-kmod \
+  nvidia-container-toolkit \
+  nvidia-modprobe \
+  nvidia-settings || true
 
+# Core desktop, gaming, media, codec, theming, and build dependencies.
 install_available \
   brave-origin \
-  faugus-launcher kitty umu-launcher pcmanfm-qt \
-  code lact scx-scheds scx-tools-git gamemode \
-  libva-nvidia-driver nvidia-vaapi-driver nvidia-container-toolkit \
-  vulkan-tools egl-utils glx-utils clinfo libva-utils mesa-vulkan-drivers \
-  git make gcc clang llvm bpftool libbpf libbpf-devel libcap libcap-devel libnl3 libnl3-devel python3-docutils elfutils-libelf-devel pkgconf-pkg-config zlib-devel cmake ninja-build \
-  ffmpeg ffmpeg-libs libavcodec-freeworld mozilla-openh264 \
-  gstreamer1-plugin-openh264 gstreamer1-plugins-base gstreamer1-plugins-good \
-  gstreamer1-plugins-bad-free gstreamer1-plugins-bad-freeworld \
-  gstreamer1-plugins-ugly gstreamer1-libav gstreamer1-vaapi \
-  lame x264 x265 svt-av1-libs rav1e-libs aom dav1d \
-  ffmpegthumbnailer kdegraphics-thumbnailers kio-extras \
-  heif-pixbuf-loader libheif-freeworld webp-pixbuf-loader libjxl libjxl-utils \
-  raw-thumbnailer poppler-utils libgsf tumbler \
-  hunspell hunspell-en-US hunspell-ar hyphen-en hyphen-ar aspell aspell-en aspell-ar \
-  words autocorr-en autocorr-ar \
-  nerd-fonts jetbrains-mono-fonts fira-code-fonts cascadia-code-fonts \
-  google-noto-sans-arabic-fonts google-noto-naskh-arabic-fonts google-noto-kufi-arabic-fonts \
-  wireplumber pipewire pipewire-utils pipewire-alsa pipewire-pulseaudio pipewire-jack-audio-connection-kit \
-  mangohud gamescope
+  faugus-launcher \
+  gamemode \
+  gamescope \
+  goverlay \
+  heroic \
+  heroic-games-launcher \
+  kitty \
+  lact \
+  lutris \
+  mangohud \
+  opi \
+  pcmanfm-qt \
+  protontricks \
+  scx-scheds \
+  scx-tools-git \
+  steam \
+  steam-devices \
+  umu-launcher \
+  vkBasalt \
+  winetricks \
+  xdg-desktop-portal-kde \
+  code \
+  clinfo \
+  egl-utils \
+  glx-utils \
+  libva-utils \
+  libva-nvidia-driver \
+  mesa-dri-drivers \
+  mesa-vulkan-drivers \
+  nvidia-vaapi-driver \
+  vulkan-tools \
+  appstream \
+  bpftool \
+  clang \
+  cmake \
+  elfutils-libelf-devel \
+  gcc \
+  git \
+  jq \
+  libappstream-glib \
+  libbpf \
+  libbpf-devel \
+  libepoxy-devel \
+  libcap \
+  libcap-devel \
+  libnl3 \
+  libnl3-devel \
+  llvm \
+  make \
+  ninja-build \
+  pkgconf-pkg-config \
+  python3-docutils \
+  sassc \
+  "cmake(KDecoration3)" \
+  "cmake(KF5ConfigWidgets)" \
+  "cmake(KF5CoreAddons)" \
+  "cmake(KF5FrameworkIntegration)" \
+  "cmake(KF5GlobalAccel)" \
+  "cmake(KF5GuiAddons)" \
+  "cmake(KF5I18n)" \
+  "cmake(KF5IconThemes)" \
+  "cmake(KF5Init)" \
+  "cmake(KF5KIO)" \
+  "cmake(KF5WindowSystem)" \
+  "cmake(Qt5Core)" \
+  "cmake(Qt5DBus)" \
+  "cmake(Qt5Gui)" \
+  "cmake(Qt5UiTools)" \
+  kf5-kcmutils-devel \
+  kf5-kirigami2-devel \
+  kf5-kpackage-devel \
+  kf6-frameworkintegration-devel \
+  kf6-kcmutils-devel \
+  kf6-kcolorscheme-devel \
+  kf6-kiconthemes-devel \
+  kf6-kguiaddons-devel \
+  kf6-ki18n-devel \
+  kf6-kirigami-devel \
+  kwin-devel \
+  qt5-qtquickcontrols2-devel \
+  unzip \
+  zlib-devel \
+  ffmpeg \
+  ffmpeg-libs \
+  ffmpegthumbnailer \
+  gstreamer1-libav \
+  gstreamer1-plugin-openh264 \
+  gstreamer1-plugins-bad-free \
+  gstreamer1-plugins-bad-freeworld \
+  gstreamer1-plugins-base \
+  gstreamer1-plugins-good \
+  gstreamer1-plugins-ugly \
+  gstreamer1-vaapi \
+  heif-pixbuf-loader \
+  kio-extras \
+  kdegraphics-thumbnailers \
+  lame \
+  libavcodec-freeworld \
+  libgsf \
+  libheif-freeworld \
+  libjxl \
+  libjxl-utils \
+  mozilla-openh264 \
+  poppler-utils \
+  raw-thumbnailer \
+  rav1e-libs \
+  svt-av1-libs \
+  tumbler \
+  webp-pixbuf-loader \
+  x264 \
+  x265 \
+  aom \
+  dav1d \
+  aspell \
+  aspell-ar \
+  aspell-en \
+  autocorr-ar \
+  autocorr-en \
+  hunspell \
+  hunspell-ar \
+  hunspell-en-US \
+  hyphen-ar \
+  hyphen-en \
+  words \
+  adobe-source-code-pro-fonts \
+  cascadia-code-fonts \
+  fira-code-fonts \
+  google-noto-color-emoji-fonts \
+  google-noto-kufi-arabic-fonts \
+  google-noto-naskh-arabic-fonts \
+  google-noto-sans-arabic-fonts \
+  inter-fonts \
+  jetbrains-mono-fonts \
+  liberation-sans-fonts \
+  liberation-serif-fonts \
+  nerd-fonts \
+  pipewire \
+  pipewire-alsa \
+  pipewire-jack-audio-connection-kit \
+  pipewire-pulseaudio \
+  pipewire-utils \
+  wireplumber \
+  gtk-murrine-engine \
+  hicolor-icon-theme \
+  kvantum \
+  kvantum-qt5 \
+  qt5ct \
+  qt6ct
 
-  # Vicinae from Terra (Bazzite already carries Terra; enabled above).
-  # NOTE: Terra's vicinae RPM depends on qt6-qtbase-gui -> mesa-libEGL,
-  # which is excluded on Bazzite. Skip RPM install here; AppImage used instead.
-  # install_available vicinae || true
+# Vicinae from Terra is not used directly because the current RPM conflicts with the
+# Bazzite base's mesa-libEGL exclusions. We keep Terra configured and install Vicinae
+# from the upstream AppImage in the direct-source installer step instead.
 
 # Brave + uBlock Origin policy. This gives "Brave + Origin" behavior without mutating user profiles.
 install -d -m 0755 /etc/brave/policies/managed /etc/chromium/policies/managed
