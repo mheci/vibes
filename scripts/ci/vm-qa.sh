@@ -108,11 +108,9 @@ done
 # 6. Critical packages / repositories
 REQUIRED_RPMS=(
   brave-origin
-  darkly
   firefox
   steam-devices
   terra-release
-  waterfox
 )
 for pkg in "${REQUIRED_RPMS[@]}"; do
   if rpm -q "$pkg" >/dev/null 2>&1; then
@@ -231,6 +229,7 @@ done
     /usr/share/icons/DDCmacOsTahoe-cursor-dark \
     /usr/share/icons/DDCmacOsTahoe-cursor-mixed \
     /usr/share/icons/DDCmacOsTahoe-cursor-white \
+    /usr/share/icons/WhiteSur \
     /usr/share/icons/WhiteSur-cursors \
     /usr/share/vibes/themes-manifest.txt; do
     if [[ -e "$path" ]]; then

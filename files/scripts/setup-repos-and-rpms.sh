@@ -7,60 +7,116 @@ else
   DNF=(dnf -y)
 fi
 
+log() {
+  printf '%s\n' "$*"
+}
+
+warn() {
+  printf 'WARN: %s\n' "$*" >&2
+}
+
+die() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+on_error() {
+  local exit_code=$?
+  local line_no=$1
+  die "setup-repos-and-rpms.sh failed at line ${line_no} with exit code ${exit_code}"
+}
+trap 'on_error $LINENO' ERR
+
 retry() {
   local attempts=4 delay=10 n=1
   until "$@"; do
     if (( n >= attempts )); then
-      echo "ERROR: command failed after ${attempts} attempts: $*" >&2
+      printf 'ERROR: command failed after %d attempts: %s\n' "$attempts" "$*" >&2
       return 1
     fi
-    echo "WARN: command failed, retrying in ${delay}s: $*" >&2
+    printf 'WARN: command failed, retrying in %ss: %s\n' "$delay" "$*" >&2
     sleep "$delay"
     n=$((n + 1))
     delay=$((delay * 2))
   done
 }
 
-set_repo_enabled() {
+repo_exists() {
   local repo_id="$1"
-  local state="$2"
-  "${DNF[@]}" config-manager setopt "${repo_id}.enabled=${state}" || true
+  "${DNF[@]}" repolist --all "$repo_id" >/dev/null 2>&1
+}
+
+enable_repo_if_present() {
+  local repo_id="$1"
+  if repo_exists "$repo_id"; then
+    retry "${DNF[@]}" config-manager setopt "${repo_id}.enabled=1"
+  else
+    warn "repository '${repo_id}' not present; skipping enable step"
+  fi
 }
 
 add_copr() {
   local copr="$1"
-  echo "Enabling COPR: ${copr}"
-  retry "${DNF[@]}" copr enable "$copr" || {
-    echo "WARN: failed to enable COPR ${copr}, continuing anyway" >&2
-    return 0
-  }
+  log "Enabling COPR: ${copr}"
+  retry "${DNF[@]}" copr enable "$copr"
 }
 
-install_available() {
-  local pkgs=("$@") available=() pkg
-  for pkg in "${pkgs[@]}"; do
-    if rpm -q "$pkg" >/dev/null 2>&1 || "${DNF[@]}" repoquery --available "$pkg" >/dev/null 2>&1; then
-      available+=("$pkg")
-    else
-      echo "WARN: package unavailable in enabled repos, skipping: $pkg" >&2
+package_available_or_installed() {
+  local pkg="$1"
+  rpm -q "$pkg" >/dev/null 2>&1 || "${DNF[@]}" repoquery --available "$pkg" >/dev/null 2>&1
+}
+
+install_required_packages() {
+  local pkg missing=0
+  for pkg in "$@"; do
+    if ! package_available_or_installed "$pkg"; then
+      warn "required package unavailable in enabled repos: $pkg"
+      missing=1
     fi
   done
 
-  if (( ${#available[@]} == 0 )); then
-    return 0
-  fi
+  (( missing == 0 )) || die "one or more required packages are unavailable"
+  retry "${DNF[@]}" install "$@"
+}
 
-  if ! retry "${DNF[@]}" install "${available[@]}"; then
-    echo "WARN: batch package install failed; retrying packages one-by-one without long retries" >&2
-    for pkg in "${available[@]}"; do
-      "${DNF[@]}" install "$pkg" || echo "WARN: failed to install optional package: $pkg" >&2
-    done
+install_optional_packages() {
+  local pkg available=()
+  for pkg in "$@"; do
+    if package_available_or_installed "$pkg"; then
+      available+=("$pkg")
+    else
+      warn "optional package unavailable in enabled repos, skipping: $pkg"
+    fi
+  done
+
+  if (( ${#available[@]} > 0 )); then
+    if ! retry "${DNF[@]}" install "${available[@]}"; then
+      warn "optional package batch install failed; retrying one-by-one"
+      for pkg in "${available[@]}"; do
+        if ! "${DNF[@]}" install "$pkg"; then
+          warn "failed to install optional package: $pkg"
+        fi
+      done
+    fi
+  fi
+}
+
+remove_if_installed() {
+  local installed=() pkg
+  for pkg in "$@"; do
+    if rpm -q "$pkg" >/dev/null 2>&1; then
+      installed+=("$pkg")
+    fi
+  done
+
+  if (( ${#installed[@]} > 0 )); then
+    retry "${DNF[@]}" remove --no-autoremove "${installed[@]}"
   fi
 }
 
 install -d -m 0755 /etc/yum.repos.d
 
-# Official Brave RPM repository (provides brave-origin and brave-browser).
+# Official Brave RPM repository.
 cat >/etc/yum.repos.d/brave-browser.repo <<'REPO'
 [brave-browser]
 name=Brave Browser
@@ -85,29 +141,23 @@ gpgkey=https://packages.microsoft.com/keys/microsoft.asc
 skip_if_unavailable=True
 REPO
 
-# Waterfox RPM repository.
-cat >/etc/yum.repos.d/waterfox.repo <<'REPO'
-[waterfox]
-name=Waterfox
-baseurl=https://repo.waterfox.net/fedora/$releasever/
-enabled=1
-gpgcheck=1
-gpgkey=https://repo.waterfox.net/key.asc
-skip_if_unavailable=True
-REPO
-
-# Configure Terra from the official subatomic repo file so atomic installs stay aligned
-# with current upstream guidance. Keep the stable main repo and extras enabled. We do not
-# force Terra multimedia because upstream currently documents it as unstable/WIP.
+# Official Terra repository configuration for atomic Fedora derivatives.
 retry curl -fsSL -o /etc/yum.repos.d/terra.repo \
   https://raw.githubusercontent.com/terrapkg/subatomic-repos/main/terra.repo
-retry "${DNF[@]}" install --nogpgcheck terra-release || true
-install_available terra-release-extras || true
-set_repo_enabled terra 1
-set_repo_enabled terra-extras 1
 
-# Ensure DNF plugins are available before further repo manipulation.
-retry "${DNF[@]}" install --skip-unavailable dnf5-plugins dnf-plugins-core || true
+# DNF plugins are required for config-manager and COPR enablement.
+install_required_packages jq curl git
+if command -v dnf5 >/dev/null 2>&1; then
+  install_required_packages dnf5-plugins
+else
+  install_required_packages dnf-plugins-core
+fi
+
+# Terra release packages should be installed from Terra itself so repo migrations are handled upstream.
+retry "${DNF[@]}" install --nogpgcheck terra-release
+install_optional_packages terra-release-extras
+enable_repo_if_present terra
+enable_repo_if_present terra-extras
 
 # COPRs and adjacent repos for image-specific software.
 add_copr faugus/faugus-launcher
@@ -116,88 +166,164 @@ add_copr bieszczaders/kernel-cachyos-addons
 add_copr che/nerd-fonts
 
 # Refresh metadata after adding repositories.
-set_repo_enabled fedora-cisco-openh264 1
+enable_repo_if_present fedora-cisco-openh264
 retry "${DNF[@]}" makecache
 
-# Remove flatpak Firefox if present so the RPM replacement is the only Firefox.
+# Remove Flatpak Firefox if present so the RPM replacement is authoritative.
 if command -v flatpak >/dev/null 2>&1; then
-  flatpak uninstall --system -y org.mozilla.firefox >/dev/null 2>&1 || true
+  if flatpak list --system --app --columns=application | grep -qx 'org.mozilla.firefox'; then
+    retry flatpak uninstall --system -y org.mozilla.firefox
+  fi
 fi
 
-# Firefox RPM can conflict with preinstalled OpenH264 providers on atomic bases; install it first
-# without those providers present, then install codecs and the rest of the stack afterwards.
-"${DNF[@]}" remove --no-autoremove openh264 mozilla-openh264 gstreamer1-plugin-openh264 || true
-retry "${DNF[@]}" install firefox || retry "${DNF[@]}" install --setopt=install_weak_deps=False firefox
+# Firefox RPM can conflict with preinstalled OpenH264 providers on atomic bases.
+remove_if_installed openh264 mozilla-openh264 gstreamer1-plugin-openh264
+retry "${DNF[@]}" install firefox
 
-# Direct repositories / latest channels.
-install_available waterfox || true
-
-# Latest NVIDIA user space and akmods. The image already tracks the latest Bazzite NVIDIA Open
-# base; these packages ensure the layered userspace and rebuild tooling stay current as well.
-install_available \
+# The image already tracks the latest Bazzite NVIDIA Open base. These layered packages ensure
+# the matching userspace and rebuild tooling are present as the base updates.
+install_required_packages \
   akmod-nvidia-open \
-  nvidia-open-dkms \
-  nvidia-open-kmod \
   nvidia-container-toolkit \
   nvidia-modprobe \
-  nvidia-settings || true
+  nvidia-settings
+install_optional_packages nvidia-open-dkms nvidia-open-kmod nvidia-vaapi-driver
 
 # Core desktop, gaming, media, codec, theming, and build dependencies.
-install_available \
+install_required_packages \
   brave-origin \
-  faugus-launcher \
-  gamemode \
+  code \
+  ffmpeg \
+  ffmpeg-libs \
+  ffmpegthumbnailer \
   gamescope \
-  goverlay \
-  heroic \
-  heroic-games-launcher \
+  gamemode \
+  gstreamer1-libav \
+  gstreamer1-plugin-openh264 \
+  gstreamer1-plugins-bad-free \
+  gstreamer1-plugins-bad-freeworld \
+  gstreamer1-plugins-base \
+  gstreamer1-plugins-good \
+  gstreamer1-plugins-ugly \
+  gstreamer1-vaapi \
+  gtk-murrine-engine \
+  hicolor-icon-theme \
+  hunspell \
+  hunspell-ar \
+  hunspell-en-US \
+  hyphen-ar \
+  hyphen-en \
+  inter-fonts \
+  jetbrains-mono-fonts \
+  kio-extras \
   kitty \
-  lact \
-  lutris \
+  kvantum \
+  kvantum-qt5 \
+  libappstream-glib \
+  libavcodec-freeworld \
+  libbpf \
+  libbpf-devel \
+  libcap \
+  libcap-devel \
+  libepoxy-devel \
+  libgsf \
+  libheif-freeworld \
+  libjxl \
+  libjxl-utils \
+  libnl3 \
+  libnl3-devel \
+  libva-nvidia-driver \
+  libva-utils \
+  make \
   mangohud \
-  opi \
-  pcmanfm-qt \
-  protontricks \
+  mesa-dri-drivers \
+  mesa-vulkan-drivers \
+  mozilla-openh264 \
+  pipewire \
+  pipewire-alsa \
+  pipewire-jack-audio-connection-kit \
+  pipewire-pulseaudio \
+  pipewire-utils \
+  pkgconf-pkg-config \
+  qt5ct \
+  qt6ct \
+  sassc \
   scx-scheds \
   scx-tools-git \
   steam \
   steam-devices \
   umu-launcher \
-  vkBasalt \
-  winetricks \
-  xdg-desktop-portal-kde \
-  code \
-  clinfo \
-  egl-utils \
-  glx-utils \
-  libva-utils \
-  libva-nvidia-driver \
-  mesa-dri-drivers \
-  mesa-vulkan-drivers \
-  nvidia-vaapi-driver \
+  unzip \
   vulkan-tools \
+  wireplumber \
+  words \
+  x264 \
+  x265 \
+  xdg-desktop-portal-kde
+
+install_optional_packages \
+  aom \
+  adobe-source-code-pro-fonts \
   appstream \
+  aspell \
+  aspell-ar \
+  aspell-en \
+  autocorr-ar \
+  autocorr-en \
   bpftool \
+  cascadia-code-fonts \
   clang \
+  clinfo \
   cmake \
+  dav1d \
+  egl-utils \
   elfutils-libelf-devel \
+  faugus-launcher \
+  fira-code-fonts \
   gcc \
-  git \
-  jq \
-  libappstream-glib \
-  libbpf \
-  libbpf-devel \
-  libepoxy-devel \
-  libcap \
-  libcap-devel \
-  libnl3 \
-  libnl3-devel \
+  glx-utils \
+  google-noto-color-emoji-fonts \
+  google-noto-kufi-arabic-fonts \
+  google-noto-naskh-arabic-fonts \
+  google-noto-sans-arabic-fonts \
+  goverlay \
+  heif-pixbuf-loader \
+  heroic \
+  heroic-games-launcher \
+  kf5-kcmutils-devel \
+  kf5-kirigami2-devel \
+  kf5-kpackage-devel \
+  kf6-frameworkintegration-devel \
+  kf6-kcmutils-devel \
+  kf6-kcolorscheme-devel \
+  kf6-kiconthemes-devel \
+  kf6-kguiaddons-devel \
+  kf6-ki18n-devel \
+  kf6-kirigami-devel \
+  kdegraphics-thumbnailers \
+  kwin-devel \
+  lact \
+  lame \
+  liberation-sans-fonts \
+  liberation-serif-fonts \
   llvm \
-  make \
+  lutris \
+  nerd-fonts \
   ninja-build \
-  pkgconf-pkg-config \
+  opi \
+  pcmanfm-qt \
+  poppler-utils \
+  protontricks \
   python3-docutils \
-  sassc \
+  qt5-qtquickcontrols2-devel \
+  rav1e-libs \
+  raw-thumbnailer \
+  svt-av1-libs \
+  tumbler \
+  vkBasalt \
+  webp-pixbuf-loader \
+  winetricks \
+  zlib-devel \
   "cmake(KDecoration3)" \
   "cmake(KF5ConfigWidgets)" \
   "cmake(KF5CoreAddons)" \
@@ -212,93 +338,9 @@ install_available \
   "cmake(Qt5Core)" \
   "cmake(Qt5DBus)" \
   "cmake(Qt5Gui)" \
-  "cmake(Qt5UiTools)" \
-  kf5-kcmutils-devel \
-  kf5-kirigami2-devel \
-  kf5-kpackage-devel \
-  kf6-frameworkintegration-devel \
-  kf6-kcmutils-devel \
-  kf6-kcolorscheme-devel \
-  kf6-kiconthemes-devel \
-  kf6-kguiaddons-devel \
-  kf6-ki18n-devel \
-  kf6-kirigami-devel \
-  kwin-devel \
-  qt5-qtquickcontrols2-devel \
-  unzip \
-  zlib-devel \
-  ffmpeg \
-  ffmpeg-libs \
-  ffmpegthumbnailer \
-  gstreamer1-libav \
-  gstreamer1-plugin-openh264 \
-  gstreamer1-plugins-bad-free \
-  gstreamer1-plugins-bad-freeworld \
-  gstreamer1-plugins-base \
-  gstreamer1-plugins-good \
-  gstreamer1-plugins-ugly \
-  gstreamer1-vaapi \
-  heif-pixbuf-loader \
-  kio-extras \
-  kdegraphics-thumbnailers \
-  lame \
-  libavcodec-freeworld \
-  libgsf \
-  libheif-freeworld \
-  libjxl \
-  libjxl-utils \
-  mozilla-openh264 \
-  poppler-utils \
-  raw-thumbnailer \
-  rav1e-libs \
-  svt-av1-libs \
-  tumbler \
-  webp-pixbuf-loader \
-  x264 \
-  x265 \
-  aom \
-  dav1d \
-  aspell \
-  aspell-ar \
-  aspell-en \
-  autocorr-ar \
-  autocorr-en \
-  hunspell \
-  hunspell-ar \
-  hunspell-en-US \
-  hyphen-ar \
-  hyphen-en \
-  words \
-  adobe-source-code-pro-fonts \
-  cascadia-code-fonts \
-  fira-code-fonts \
-  google-noto-color-emoji-fonts \
-  google-noto-kufi-arabic-fonts \
-  google-noto-naskh-arabic-fonts \
-  google-noto-sans-arabic-fonts \
-  inter-fonts \
-  jetbrains-mono-fonts \
-  liberation-sans-fonts \
-  liberation-serif-fonts \
-  nerd-fonts \
-  pipewire \
-  pipewire-alsa \
-  pipewire-jack-audio-connection-kit \
-  pipewire-pulseaudio \
-  pipewire-utils \
-  wireplumber \
-  gtk-murrine-engine \
-  hicolor-icon-theme \
-  kvantum \
-  kvantum-qt5 \
-  qt5ct \
-  qt6ct
+  "cmake(Qt5UiTools)"
 
-# Vicinae from Terra is not used directly because the current RPM conflicts with the
-# Bazzite base's mesa-libEGL exclusions. We keep Terra configured and install Vicinae
-# from the upstream AppImage in the direct-source installer step instead.
-
-# Brave + uBlock Origin policy. This gives "Brave + Origin" behavior without mutating user profiles.
+# Brave + uBlock Origin policy. This gives “Brave + Origin” behavior without mutating user profiles.
 install -d -m 0755 /etc/brave/policies/managed /etc/chromium/policies/managed
 cat >/etc/brave/policies/managed/10-ublock-origin.json <<'JSON'
 {
@@ -324,7 +366,7 @@ cat >/usr/lib64/firefox/distribution/policies.json <<'JSON'
   }
 }
 JSON
-cp /usr/lib64/firefox/distribution/policies.json /usr/lib/firefox/distribution/policies.json || true
+cp /usr/lib64/firefox/distribution/policies.json /usr/lib/firefox/distribution/policies.json
 
 # NVIDIA/Wayland acceleration defaults. These are system defaults only; users can override them.
 cat >/etc/profile.d/90-vibes-nvidia-accel.sh <<'EOFENV'
@@ -339,7 +381,6 @@ export NVD_BACKEND=direct
 EOFENV
 chmod 0644 /etc/profile.d/90-vibes-nvidia-accel.sh
 
-# Also set the same for shells that source /etc/environment.d
 install -d -m 0755 /etc/environment.d
 cat >/etc/environment.d/90-vibes-nvidia-accel.conf <<'EOFENV'
 MOZ_ENABLE_WAYLAND=1
@@ -351,13 +392,11 @@ GBM_BACKEND=nvidia-drm
 NVD_BACKEND=direct
 EOFENV
 
-# LACT daemon: enable if RPM installed a service.
 install -d -m 0755 /etc/systemd/system/multi-user.target.wants
 if [[ -f /usr/lib/systemd/system/lactd.service ]]; then
   ln -sf /usr/lib/systemd/system/lactd.service /etc/systemd/system/multi-user.target.wants/lactd.service
 fi
 
-# scx_loader default config: LAVD in Gaming mode maps to --performance in current scx_loader.
 install -d -m 0755 /etc/scx_loader
 cat >/etc/scx_loader/config.toml <<'TOML'
 default_sched = "scx_lavd"
@@ -393,6 +432,5 @@ UNIT
   ln -sf /usr/lib/systemd/system/scx-lavd.service /etc/systemd/system/multi-user.target.wants/scx-lavd.service
 fi
 
-# Clean caches to keep the final image smaller.
-"${DNF[@]}" clean all || true
-rm -rf /var/cache/dnf /var/cache/libdnf5 || true
+"${DNF[@]}" clean all
+rm -rf /var/cache/dnf /var/cache/libdnf5

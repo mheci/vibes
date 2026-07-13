@@ -26,7 +26,6 @@ modules:
       - notify: true
         scope: system
         install:
-          - net.waterfox.waterfox
           - org.gnome.Loupe
       - scope: user
 

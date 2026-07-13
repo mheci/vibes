@@ -7,13 +7,13 @@ Current base: `ghcr.io/ublue-os/bazzite-nvidia-open:latest` → published as `gh
 ## What's inside
 
 - **Base**: Bazzite NVIDIA Open (latest)
-- **Browsers**: Waterfox (RPM + Flatpak), Brave Origin (RPM with uBlock Origin policy), Firefox (RPM replacing Flatpak)
+- **Browsers**: Waterfox (latest official upstream tarball), Brave Origin (RPM with uBlock Origin policy), Firefox (RPM replacing Flatpak)
 - **Development**: VS Code, Zed, opencode CLI + Desktop, Heroic Games Launcher
 - **AI**: LM Studio, Vicinae launcher
 - **Gaming**: Steam + steam-devices, Faugus Launcher, Heroic, Lutris, umu-launcher, MangoHud, GameScope, Proton helpers, scx LAVD scheduler (performance mode)
 - **Audio**: High-quality PipeWire + WirePlumber configs, RNNoise stereo noise suppression
 - **GPU**: Latest Bazzite NVIDIA Open base plus layered NVIDIA userspace / akmod tooling, VAAPI/VDPAU/NVD acceleration defaults
-- **Themes**: Darkly Qt + GTK, Beauty Plasma Themes, macOsTahoeKdeTheme bundle, WhiteSur KDE, McMojave KDE, WhiteSur cursors, macOS-style cursor variants
+- **Themes**: Darkly Qt + GTK, Beauty Plasma Themes, macOsTahoeKdeTheme bundle, WhiteSur KDE + icons + cursors, McMojave KDE, macOS-style cursor variants
 - **System**: Terra stable + extras configured, comprehensive codec & thumbnail support, development fonts, Arabic + English spellcheck
 
 ## Installation
@@ -25,7 +25,7 @@ To rebase an existing atomic Fedora installation to the latest build:
 
 - First rebase to the unsigned image, to get the proper signing keys and policies installed:
   ```
-  rpm-ostree rebase ostree-unverified-registry:ghcr.io/mheci/vibes:latest
+  rpm-ostree rebase ostree-unverified-registry:ghcr.io/mheci/vibes:stable
   ```
 - Reboot to complete the rebase:
   ```
@@ -33,7 +33,7 @@ To rebase an existing atomic Fedora installation to the latest build:
   ```
 - Then rebase to the signed image, like so:
   ```
-  rpm-ostree rebase ostree-image-signed:docker://ghcr.io/mheci/vibes:latest
+  rpm-ostree rebase ostree-image-signed:docker://ghcr.io/mheci/vibes:stable
   ```
 - Reboot again to complete the installation
   ```

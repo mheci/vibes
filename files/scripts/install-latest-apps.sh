@@ -7,72 +7,127 @@ else
   DNF=(dnf -y)
 fi
 
+log() {
+  printf '%s\n' "$*"
+}
+
+warn() {
+  printf 'WARN: %s\n' "$*" >&2
+}
+
+die() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+# shellcheck disable=SC2329
+on_error() {
+  local exit_code=$?
+  local line_no=$1
+  die "install-latest-apps.sh failed at line ${line_no} with exit code ${exit_code}"
+}
+trap 'on_error $LINENO' ERR
+
 retry() {
   local attempts=4 delay=10 n=1
   until "$@"; do
     if (( n >= attempts )); then
-      echo "ERROR: command failed after ${attempts} attempts: $*" >&2
+      printf 'ERROR: command failed after %d attempts: %s\n' "$attempts" "$*" >&2
       return 1
     fi
-    echo "WARN: command failed, retrying in ${delay}s: $*" >&2
+    printf 'WARN: command failed, retrying in %ss: %s\n' "$delay" "$*" >&2
     sleep "$delay"
     n=$((n + 1))
     delay=$((delay * 2))
   done
 }
 
-# Use curl + jq to fetch latest release asset URLs from GitHub.
-# Avoids Python heredocs which can break in restricted BlueBuild container envs.
-gh_asset_url() {
-  local repo="$1" pattern="$2"
-  local api_url="https://api.github.com/repos/${repo}/releases/latest"
-  local headers=(-H "Accept: application/vnd.github+json" -H "User-Agent: vibes-bluebuild")
+github_headers() {
+  local headers=(-H 'Accept: application/vnd.github+json' -H 'User-Agent: vibes-bluebuild')
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     headers+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
   elif [[ -n "${GH_PAT:-}" ]]; then
     headers+=(-H "Authorization: Bearer ${GH_PAT}")
   fi
-  local assets_json
-  assets_json="$(curl -sSL "${headers[@]}" "$api_url" | jq -c '.assets // []')"
-  if [[ -z "$assets_json" || "$assets_json" == "null" ]]; then
-    echo "ERROR: failed to fetch release assets for ${repo}" >&2
-    return 1
+  printf '%s\n' "${headers[@]}"
+}
+
+github_api_get() {
+  local url="$1"
+  local header_array=()
+  mapfile -t header_array < <(github_headers)
+  retry curl -fsSL "${header_array[@]}" "$url"
+}
+
+github_latest_release_json() {
+  local repo="$1"
+  github_api_get "https://api.github.com/repos/${repo}/releases/latest"
+}
+
+github_asset_json() {
+  local repo="$1" pattern="$2"
+  github_latest_release_json "$repo" | jq -r --arg pattern "$pattern" '
+    [.assets[]? | select(.name | test($pattern; "i"))] | first // empty
+  '
+}
+
+download_github_asset() {
+  local repo="$1" pattern="$2" output="$3"
+  local asset_json url digest algo expected
+
+  asset_json="$(github_asset_json "$repo" "$pattern")"
+  [[ -n "$asset_json" && "$asset_json" != "null" ]] || die "no release asset matching '${pattern}' found for ${repo}"
+
+  url="$(jq -r '.browser_download_url // empty' <<<"$asset_json")"
+  digest="$(jq -r '.digest // empty' <<<"$asset_json")"
+  [[ -n "$url" ]] || die "release asset for ${repo} does not expose a download URL"
+
+  log "Downloading ${repo} asset ${url}"
+  retry curl -fL --retry 4 --retry-delay 10 -o "$output" "$url"
+
+  if [[ -n "$digest" ]]; then
+    algo="${digest%%:*}"
+    expected="${digest#*:}"
+    case "$algo" in
+      sha256)
+        printf '%s  %s\n' "$expected" "$output" | sha256sum -c -
+        ;;
+      sha512)
+        printf '%s  %s\n' "$expected" "$output" | sha512sum -c -
+        ;;
+      *)
+        warn "unsupported digest algorithm '${algo}' for ${repo} asset verification"
+        ;;
+    esac
   fi
-  local url
-  url="$(echo "$assets_json" | jq -r --arg pattern "$pattern" '[.[] | select(.name | test($pattern; "i"))] | first | .browser_download_url // empty')"
-  if [[ -z "$url" ]]; then
-    echo "ERROR: no asset matching pattern '${pattern}' in ${repo} latest release" >&2
-    return 1
-  fi
-  echo "$url"
 }
 
 install_latest_rpm() {
   local repo="$1" pattern="$2" name="$3"
-  local url rpm
-  url="$(gh_asset_url "$repo" "$pattern")"
-  rpm="/tmp/${name}.rpm"
-  echo "Installing latest ${name} RPM from ${url}"
-  retry curl -fL --retry 4 --retry-delay 10 -o "$rpm" "$url"
+  local rpm="/tmp/${name}.rpm"
+  download_github_asset "$repo" "$pattern" "$rpm"
   retry "${DNF[@]}" install --skip-unavailable "$rpm"
   rm -f "$rpm"
 }
 
 install_latest_appimage() {
   local repo="$1" pattern="$2" binary="$3" desktop_name="$4" comment="$5" categories="${6:-Utility;}"
-  local url path icon_dir
-  url="$(gh_asset_url "$repo" "$pattern")"
+  local path icon_dir appimage_tmp
+  appimage_tmp="/tmp/${binary}.AppImage"
   path="/usr/lib/vibes-apps/${binary}/${binary}.AppImage"
   icon_dir="/usr/share/icons/hicolor/256x256/apps"
-  echo "Installing latest ${desktop_name} AppImage from ${url}"
+
+  download_github_asset "$repo" "$pattern" "$appimage_tmp"
   install -d -m 0755 "/usr/lib/vibes-apps/${binary}" "$icon_dir" /usr/share/applications
-  retry curl -fL --retry 4 --retry-delay 10 -o "$path" "$url"
-  chmod 0755 "$path"
+  install -m 0755 "$appimage_tmp" "$path"
+  rm -f "$appimage_tmp"
+
   cat >"/usr/bin/${binary}" <<EOFAPP
 #!/usr/bin/env bash
 exec "${path}" "\$@"
 EOFAPP
   chmod 0755 "/usr/bin/${binary}"
+
   cat >"/usr/share/applications/${binary}.desktop" <<EOFDESKTOP
 [Desktop Entry]
 Name=${desktop_name}
@@ -85,39 +140,84 @@ StartupNotify=true
 EOFDESKTOP
 }
 
-# Zed latest official Linux tarball.
-install -d -m 0755 /usr/lib/zed /usr/bin /usr/share/applications /usr/share/icons/hicolor
-retry curl -fL --retry 4 --retry-delay 10 -o /tmp/zed-linux-x86_64.tar.gz \
-  'https://zed.dev/api/releases/stable/latest/zed-linux-x86_64.tar.gz'
-rm -rf /tmp/zed.app
-mkdir -p /tmp/zed.app
-tar -xzf /tmp/zed-linux-x86_64.tar.gz -C /tmp/zed.app --strip-components=1
-rm -rf /usr/lib/zed/*
-cp -a /tmp/zed.app/. /usr/lib/zed/
-ln -sf /usr/lib/zed/bin/zed /usr/bin/zed
-if [[ -f /usr/lib/zed/share/applications/dev.zed.Zed.desktop ]]; then
-  sed 's#Exec=zed#Exec=/usr/bin/zed#g' /usr/lib/zed/share/applications/dev.zed.Zed.desktop \
-    >/usr/share/applications/dev.zed.Zed.desktop
-fi
-if [[ -d /usr/lib/zed/share/icons/hicolor ]]; then
-  cp -a /usr/lib/zed/share/icons/hicolor/. /usr/share/icons/hicolor/
-fi
-rm -rf /tmp/zed.app /tmp/zed-linux-x86_64.tar.gz
+install_waterfox() {
+  local release_json version workdir archive base_url
+  release_json="$(github_latest_release_json 'BrowserWorks/Waterfox')"
+  version="$(jq -r '.tag_name // empty' <<<"$release_json")"
+  [[ -n "$version" ]] || die 'failed to resolve latest Waterfox release version'
 
-# Latest GitHub-release RPM applications.
-install_latest_rpm "anomalyco/opencode" 'opencode-desktop-linux-x86_64\.rpm$' "opencode-desktop"
-install_latest_rpm "Heroic-Games-Launcher/HeroicGamesLauncher" 'Heroic-.*linux.*x86_64.*\.rpm$' "heroic"
+  workdir="$(mktemp -d)"
+  archive="waterfox-${version}.tar.bz2"
+  base_url="https://cdn.waterfox.com/waterfox/releases/${version}/Linux_x86_64"
 
-# LM Studio latest official AppImage.
-install -d -m 0755 /usr/lib/vibes-apps/lmstudio /usr/share/applications /usr/bin
-retry curl -fL --retry 4 --retry-delay 10 -o /usr/lib/vibes-apps/lmstudio/LM_Studio.AppImage 'https://lmstudio.ai/download/latest/linux/x64?format=AppImage'
-chmod 0755 /usr/lib/vibes-apps/lmstudio/LM_Studio.AppImage
-cat >/usr/bin/lmstudio <<'EOFLMS'
+  log "Installing latest Waterfox ${version} from official CDN"
+  retry curl -fL --retry 4 --retry-delay 10 -o "$workdir/$archive" "${base_url}/${archive}"
+  retry curl -fL --retry 4 --retry-delay 10 -o "$workdir/${archive}.sha512" "${base_url}/${archive}.sha512"
+  (cd "$workdir" && sha512sum -c "${archive}.sha512")
+  tar -xjf "$workdir/$archive" -C "$workdir"
+
+  rm -rf /usr/lib/waterfox
+  mv "$workdir/waterfox" /usr/lib/waterfox
+
+  cat >/usr/bin/waterfox <<'EOFAPP'
+#!/usr/bin/env bash
+exec /usr/lib/waterfox/waterfox "$@"
+EOFAPP
+  chmod 0755 /usr/bin/waterfox
+
+  install -d -m 0755 /usr/share/applications /usr/share/icons/hicolor/128x128/apps
+  cat >/usr/share/applications/waterfox.desktop <<'EOFDESKTOP'
+[Desktop Entry]
+Name=Waterfox
+Comment=Privacy-focused browser
+Exec=/usr/bin/waterfox %u
+Terminal=false
+Type=Application
+Categories=Network;WebBrowser;
+Icon=waterfox
+StartupNotify=true
+MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+EOFDESKTOP
+
+  if [[ -f /usr/lib/waterfox/browser/chrome/icons/default/default128.png ]]; then
+    install -m 0644 /usr/lib/waterfox/browser/chrome/icons/default/default128.png \
+      /usr/share/icons/hicolor/128x128/apps/waterfox.png
+  fi
+
+  rm -rf "$workdir"
+}
+
+install_zed() {
+  install -d -m 0755 /usr/lib/zed /usr/bin /usr/share/applications /usr/share/icons/hicolor
+  retry curl -fL --retry 4 --retry-delay 10 -o /tmp/zed-linux-x86_64.tar.gz \
+    'https://zed.dev/api/releases/stable/latest/zed-linux-x86_64.tar.gz'
+  rm -rf /tmp/zed.app
+  mkdir -p /tmp/zed.app
+  tar -xzf /tmp/zed-linux-x86_64.tar.gz -C /tmp/zed.app --strip-components=1
+  rm -rf /usr/lib/zed/*
+  cp -a /tmp/zed.app/. /usr/lib/zed/
+  ln -sf /usr/lib/zed/bin/zed /usr/bin/zed
+  if [[ -f /usr/lib/zed/share/applications/dev.zed.Zed.desktop ]]; then
+    sed 's#Exec=zed#Exec=/usr/bin/zed#g' /usr/lib/zed/share/applications/dev.zed.Zed.desktop \
+      >/usr/share/applications/dev.zed.Zed.desktop
+  fi
+  if [[ -d /usr/lib/zed/share/icons/hicolor ]]; then
+    cp -a /usr/lib/zed/share/icons/hicolor/. /usr/share/icons/hicolor/
+  fi
+  rm -rf /tmp/zed.app /tmp/zed-linux-x86_64.tar.gz
+}
+
+install_lmstudio() {
+  install -d -m 0755 /usr/lib/vibes-apps/lmstudio /usr/share/applications /usr/bin
+  retry curl -fL --retry 4 --retry-delay 10 -o /usr/lib/vibes-apps/lmstudio/LM_Studio.AppImage \
+    'https://lmstudio.ai/download/latest/linux/x64?format=AppImage'
+  chmod 0755 /usr/lib/vibes-apps/lmstudio/LM_Studio.AppImage
+  cat >/usr/bin/lmstudio <<'EOFLMS'
 #!/usr/bin/env bash
 exec /usr/lib/vibes-apps/lmstudio/LM_Studio.AppImage "$@"
 EOFLMS
-chmod 0755 /usr/bin/lmstudio
-cat >/usr/share/applications/lmstudio.desktop <<'EOFDESKTOP'
+  chmod 0755 /usr/bin/lmstudio
+  cat >/usr/share/applications/lmstudio.desktop <<'EOFDESKTOP'
 [Desktop Entry]
 Name=LM Studio
 Comment=Local LLM management and inference
@@ -127,77 +227,98 @@ Type=Application
 Categories=Development;Science;
 StartupNotify=true
 EOFDESKTOP
+}
 
-# Vicinae AppImage (RPM excluded on Bazzite due to mesa-libEGL dependency conflict).
-install_latest_appimage "vicinaehq/vicinae" 'Vicinae-x86_64\.AppImage$' "vicinae" "Vicinae" "Raycast-inspired launcher" "Utility;"
+install_opencode_cli() {
+  retry bash -c 'curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=/usr/bin bash'
+  if [[ -x /root/.opencode/bin/opencode && ! -x /usr/bin/opencode ]]; then
+    install -Dm755 /root/.opencode/bin/opencode /usr/bin/opencode
+  fi
+}
 
-# opencode CLI latest. Installer writes the binary to /usr/local/bin through OPENCODE_INSTALL_DIR.
-retry bash -c 'curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=/usr/bin bash'
-if [[ -x /root/.opencode/bin/opencode && ! -x /usr/bin/opencode ]]; then
-  install -Dm755 /root/.opencode/bin/opencode /usr/bin/opencode
-fi
+install_rnnoise() {
+  local bundle='/tmp/linux-rnnoise.zip'
+  install -d -m 0755 /usr/lib64/rnnoise /usr/lib64/ladspa
+  download_github_asset 'werman/noise-suppression-for-voice' 'linux-rnnoise\.zip$' "$bundle"
+  rm -rf /tmp/linux-rnnoise
+  unzip -q "$bundle" -d /tmp/linux-rnnoise
+  cp -a /tmp/linux-rnnoise/. /usr/lib64/rnnoise/
 
-# werman RNNoise plugin release: install LADSPA plugin and keep the full bundle under /usr/lib64/rnnoise.
-install -d -m 0755 /usr/lib64/rnnoise /usr/lib64/ladspa
-retry curl -fL --retry 4 --retry-delay 10 -o /tmp/linux-rnnoise.zip \
-  "$(gh_asset_url "werman/noise-suppression-for-voice" 'linux-rnnoise\.zip$')"
-rm -rf /tmp/linux-rnnoise
-unzip -q /tmp/linux-rnnoise.zip -d /tmp/linux-rnnoise
-cp -a /tmp/linux-rnnoise/. /usr/lib64/rnnoise/
-ladspa_so="$(find /tmp/linux-rnnoise -type f -name 'librnnoise_ladspa.so' | head -n1 || true)"
-if [[ -z "${ladspa_so}" ]]; then
-  echo "ERROR: librnnoise_ladspa.so not found in linux-rnnoise.zip" >&2
-  exit 1
-fi
-install -Dm755 "${ladspa_so}" /usr/lib64/ladspa/librnnoise_ladspa.so
-rm -rf /tmp/linux-rnnoise /tmp/linux-rnnoise.zip
+  local ladspa_so
+  ladspa_so="$(find /tmp/linux-rnnoise -type f -name 'librnnoise_ladspa.so' | head -n1)"
+  [[ -n "$ladspa_so" ]] || die 'librnnoise_ladspa.so not found in RNNoise bundle'
+  install -Dm755 "$ladspa_so" /usr/lib64/ladspa/librnnoise_ladspa.so
 
-# bpftune latest from upstream. Build from source since Fedora packages are inconsistent.
-echo "Building and installing latest bpftune from upstream"
-rm -rf /tmp/bpftune
-retry git clone --depth 1 https://github.com/oracle/bpftune.git /tmp/bpftune
-# Ensure kernel headers are present for the build.
-"${DNF[@]}" install --skip-unavailable kernel-headers kernel-devel || true
-make -C /tmp/bpftune -j"$(nproc)"
-make -C /tmp/bpftune install
-ldconfig || true
-install -d -m 0755 /etc/systemd/system/multi-user.target.wants
-if [[ -f /usr/lib/systemd/system/bpftune.service ]]; then
-  ln -sf /usr/lib/systemd/system/bpftune.service /etc/systemd/system/multi-user.target.wants/bpftune.service
-elif [[ -f /lib/systemd/system/bpftune.service ]]; then
-  ln -sf /lib/systemd/system/bpftune.service /etc/systemd/system/multi-user.target.wants/bpftune.service
-fi
-rm -rf /tmp/bpftune
+  rm -rf /tmp/linux-rnnoise "$bundle"
+}
 
-# Smoke checks for intentionally requested critical commands/assets.
-missing=0
-for cmd in kitty pcmanfm-qt code zed lact scx_lavd opencode lmstudio vicinae; do
-  if ! command -v "$cmd" >/dev/null 2>&1; then
-    echo "WARN: requested command not found after install: $cmd" >&2
+install_bpftune() {
+  log 'Building and installing latest bpftune from upstream'
+  rm -rf /tmp/bpftune
+  retry git clone --depth 1 https://github.com/oracle/bpftune.git /tmp/bpftune
+  if rpm -q kernel-headers >/dev/null 2>&1 || "${DNF[@]}" repoquery --available kernel-headers >/dev/null 2>&1; then
+    retry "${DNF[@]}" install kernel-headers
+  fi
+  if rpm -q kernel-devel >/dev/null 2>&1 || "${DNF[@]}" repoquery --available kernel-devel >/dev/null 2>&1; then
+    retry "${DNF[@]}" install kernel-devel
+  fi
+  make -C /tmp/bpftune -j"$(nproc)"
+  make -C /tmp/bpftune install
+  if command -v ldconfig >/dev/null 2>&1; then
+    ldconfig
+  fi
+  install -d -m 0755 /etc/systemd/system/multi-user.target.wants
+  if [[ -f /usr/lib/systemd/system/bpftune.service ]]; then
+    ln -sf /usr/lib/systemd/system/bpftune.service /etc/systemd/system/multi-user.target.wants/bpftune.service
+  elif [[ -f /lib/systemd/system/bpftune.service ]]; then
+    ln -sf /lib/systemd/system/bpftune.service /etc/systemd/system/multi-user.target.wants/bpftune.service
+  else
+    die 'bpftune.service was not installed'
+  fi
+  rm -rf /tmp/bpftune
+}
+
+assert_commands_present() {
+  local missing=0 cmd
+  local required=(
+    bpftune
+    code
+    heroic
+    kitty
+    lmstudio
+    opencode
+    scx_lavd
+    vicinae
+    waterfox
+    zed
+  )
+
+  for cmd in "${required[@]}"; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      warn "required command missing after install: $cmd"
+      missing=1
+    fi
+  done
+
+  if ! command -v steam >/dev/null 2>&1; then
+    warn 'steam command missing after install'
     missing=1
   fi
-done
-# Heroic command names vary by package; accept either.
-if ! command -v heroic >/dev/null 2>&1 && ! command -v heroic-games-launcher >/dev/null 2>&1; then
-  echo "WARN: Heroic launcher command not found after install" >&2
-  missing=1
-fi
-if [[ "$missing" -ne 0 ]]; then
-  echo "WARN: one or more non-fatal application smoke checks reported missing commands" >&2
-fi
-if ! command -v bpftune >/dev/null 2>&1 && [[ ! -x /usr/sbin/bpftune ]]; then
-  echo "ERROR: bpftune missing after build" >&2
-  exit 1
-fi
-if [[ ! -e /etc/systemd/system/multi-user.target.wants/bpftune.service ]]; then
-  echo "ERROR: bpftune service is not enabled" >&2
-  exit 1
-fi
-if [[ ! -f /usr/lib64/ladspa/librnnoise_ladspa.so ]]; then
-  echo "ERROR: RNNoise LADSPA plugin missing" >&2
-  exit 1
-fi
 
-"${DNF[@]}" clean all || true
-rm -rf /var/cache/dnf /var/cache/libdnf5 || true
+  (( missing == 0 )) || die 'one or more required applications were not installed correctly'
+}
+
+install_zed
+install_latest_rpm 'anomalyco/opencode' 'opencode-desktop-linux-x86_64\.rpm$' 'opencode-desktop'
+install_latest_rpm 'Heroic-Games-Launcher/HeroicGamesLauncher' 'Heroic-.*linux.*x86_64.*\.rpm$' 'heroic'
+install_lmstudio
+install_latest_appimage 'vicinaehq/vicinae' 'Vicinae.*x86_64\.AppImage$' 'vicinae' 'Vicinae' 'Raycast-inspired launcher' 'Utility;'
+install_opencode_cli
+install_waterfox
+install_rnnoise
+install_bpftune
+assert_commands_present
+
+"${DNF[@]}" clean all
+rm -rf /var/cache/dnf /var/cache/libdnf5
 exit 0

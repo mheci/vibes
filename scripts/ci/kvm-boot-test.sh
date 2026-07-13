@@ -28,8 +28,12 @@ PIDFILE="$WORKDIR/qemu.pid"
 
 fail() {
   echo "ERROR: $*" >&2
+  echo "--- qemu log tail ---" >&2
+  tail -100 "$QEMU_LOG" >&2 || true
   echo "--- serial console tail ---" >&2
   tail -250 "$SERIAL_LOG" >&2 || true
+  echo "--- bootc-image-builder log tail ---" >&2
+  tail -120 "$BIB_LOG" >&2 || true
   exit 1
 }
 
@@ -53,20 +57,30 @@ if [[ ! -e /dev/kvm ]]; then
 fi
 
 # Best-effort make KVM accessible on GitHub-hosted runners.
-sudo chmod 666 /dev/kvm || true
+if ! sudo chmod 666 /dev/kvm; then
+  echo "WARN: unable to relax /dev/kvm permissions; continuing anyway" >&2
+fi
 
-# Prefer 4M OVMF when available, fall back to distro default.
-OVMF=""
-for candidate in \
+# Prefer OVMF code + vars pflash pairs, fall back to the older single-bios firmware.
+OVMF_CODE=""
+OVMF_VARS=""
+OVMF_BIOS=""
+for code_candidate in \
   /usr/share/OVMF/OVMF_CODE_4M.fd \
-  /usr/share/OVMF/OVMF_CODE.fd \
-  /usr/share/qemu/OVMF.fd; do
-  if [[ -r "$candidate" ]]; then
-    OVMF="$candidate"
+  /usr/share/OVMF/OVMF_CODE.fd; do
+  vars_candidate="${code_candidate/_CODE/_VARS}"
+  if [[ -r "$code_candidate" && -r "$vars_candidate" ]]; then
+    OVMF_CODE="$code_candidate"
+    OVMF_VARS="$vars_candidate"
     break
   fi
 done
-[[ -n "$OVMF" ]] || fail "No readable OVMF firmware found; install ovmf."
+if [[ -z "$OVMF_CODE" && -r /usr/share/qemu/OVMF.fd ]]; then
+  OVMF_BIOS="/usr/share/qemu/OVMF.fd"
+fi
+if [[ -z "$OVMF_CODE" && -z "$OVMF_BIOS" ]]; then
+  fail "No usable OVMF firmware found; install ovmf."
+fi
 
 # Generate an SSH key pair for this test run.
 SSH_KEY="$WORKDIR/vm_ci_key"
@@ -111,23 +125,44 @@ qemu-img info "$DISK"
 
 # Boot read-only/snapshot so validation never mutates the produced artifact.
 echo "Booting qcow2 under QEMU/KVM (SSH forwarded to host $SSH_PORT)..."
-qemu-system-x86_64 \
-  -name vibes-boot-smoke \
-  -machine q35,accel=kvm \
-  -cpu host \
-  -smp "$VCPUS" \
-  -m "$MEMORY_MB" \
-  -bios "$OVMF" \
-  -drive "if=virtio,format=qcow2,file=$DISK,snapshot=on" \
-  -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT}-:22" \
-  -device virtio-net-pci,netdev=net0 \
-  -serial "file:$SERIAL_LOG" \
-  -display none \
-  -no-reboot \
-  -device i6300esb \
-  -watchdog-action poweroff \
-  -pidfile "$PIDFILE" \
-  -daemonize 2>"$QEMU_LOG"
+QEMU_CMD=(
+  qemu-system-x86_64
+  -name vibes-boot-smoke
+  -machine "q35,accel=kvm"
+  -cpu host
+  -smp "$VCPUS"
+  -m "$MEMORY_MB"
+  -drive "if=virtio,format=qcow2,file=$DISK,snapshot=on"
+  -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT}-:22"
+  -device "virtio-net-pci,netdev=net0"
+  -serial "file:$SERIAL_LOG"
+  -display none
+  -no-reboot
+  -device i6300esb
+  -watchdog-action poweroff
+  -pidfile "$PIDFILE"
+  -daemonize
+)
+
+if [[ -n "$OVMF_CODE" ]]; then
+  OVMF_VARS_COPY="$WORKDIR/OVMF_VARS.fd"
+  cp "$OVMF_VARS" "$OVMF_VARS_COPY"
+  QEMU_CMD+=(
+    -drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE"
+    -drive "if=pflash,format=raw,file=$OVMF_VARS_COPY"
+  )
+else
+  QEMU_CMD+=( -bios "$OVMF_BIOS" )
+fi
+
+"${QEMU_CMD[@]}" 2>"$QEMU_LOG"
+
+if [[ ! -f "$PIDFILE" ]]; then
+  fail "QEMU did not create a pid file."
+fi
+if ! kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+  fail "QEMU exited immediately after launch."
+fi
 
 panic_re='Kernel panic|not syncing|Oops:|BUG:|general protection fault|Unable to mount root fs|Cannot open root device|dracut.*(timeout|Warning:)|Entering emergency mode|You are in emergency mode|Dependency failed for .*File System|Failed to start .*Switch Root|watchdog: BUG|soft lockup|hard LOCKUP|RCU stall'
 success_re='Reached target .*Multi-User|Reached target .*Graphical|Started .*Getty|login:'
@@ -188,43 +223,47 @@ fi
 # Run in-VM QA.
 qa_failed=0
 QA_SCRIPT="${GITHUB_WORKSPACE:-$(dirname "$0")}/vm-qa.sh"
-if [[ -f "$QA_SCRIPT" ]]; then
-  echo "Copying vm-qa.sh into guest and executing..."
-  scp -o StrictHostKeyChecking=no \
-      -o UserKnownHostsFile=/dev/null \
-      -o ConnectTimeout=10 \
-      -i "$SSH_KEY" \
-      -P "$SSH_PORT" \
-      "$QA_SCRIPT" ci@localhost:/tmp/vm-qa.sh
-
-  ssh -o StrictHostKeyChecking=no \
-      -o UserKnownHostsFile=/dev/null \
-      -o ConnectTimeout=10 \
-      -i "$SSH_KEY" \
-      -p "$SSH_PORT" \
-      ci@localhost "bash /tmp/vm-qa.sh" || {
-    echo "ERROR: in-VM QA script returned non-zero." >&2
-    qa_failed=1
-  }
-
-  # Pull logs back from guest.
-  scp -o StrictHostKeyChecking=no \
-      -o UserKnownHostsFile=/dev/null \
-      -o ConnectTimeout=10 \
-      -i "$SSH_KEY" \
-      -P "$SSH_PORT" \
-      -r "ci@localhost:/tmp/vibes-qa" "$WORKDIR/" || true
-else
-  echo "WARN: vm-qa.sh not found at $QA_SCRIPT, skipping deep QA." >&2
+if [[ ! -f "$QA_SCRIPT" ]]; then
+  fail "vm-qa.sh not found at $QA_SCRIPT"
 fi
 
-# Graceful shutdown via SSH to collect clean journal state.
+echo "Copying vm-qa.sh into guest and executing..."
+scp -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -o ConnectTimeout=10 \
+    -i "$SSH_KEY" \
+    -P "$SSH_PORT" \
+    "$QA_SCRIPT" ci@localhost:/tmp/vm-qa.sh
+
 ssh -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
     -o ConnectTimeout=10 \
     -i "$SSH_KEY" \
     -p "$SSH_PORT" \
-    ci@localhost "sudo systemctl poweroff" >/dev/null 2>&1 || true
+    ci@localhost "bash /tmp/vm-qa.sh" || {
+  echo "ERROR: in-VM QA script returned non-zero." >&2
+  qa_failed=1
+}
+
+# Pull logs back from guest.
+if ! scp -o StrictHostKeyChecking=no \
+         -o UserKnownHostsFile=/dev/null \
+         -o ConnectTimeout=10 \
+         -i "$SSH_KEY" \
+         -P "$SSH_PORT" \
+         -r "ci@localhost:/tmp/vibes-qa" "$WORKDIR/"; then
+  echo "WARN: failed to copy QA logs back from guest" >&2
+fi
+
+# Graceful shutdown via SSH to collect clean journal state.
+if ! ssh -o StrictHostKeyChecking=no \
+         -o UserKnownHostsFile=/dev/null \
+         -o ConnectTimeout=10 \
+         -i "$SSH_KEY" \
+         -p "$SSH_PORT" \
+         ci@localhost "sudo systemctl poweroff" >/dev/null 2>&1; then
+  echo "WARN: guest did not accept graceful poweroff command" >&2
+fi
 
 # Wait for QEMU to exit on its own after poweroff.
 shutdown_start="$(date +%s)"

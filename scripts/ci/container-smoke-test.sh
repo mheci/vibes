@@ -115,6 +115,7 @@ require_path /usr/share/icons/DDCmacOsMonterey-cursor-white
 require_path /usr/share/icons/DDCmacOsTahoe-cursor-dark
 require_path /usr/share/icons/DDCmacOsTahoe-cursor-mixed
 require_path /usr/share/icons/DDCmacOsTahoe-cursor-white
+require_path /usr/share/icons/WhiteSur
 require_path /usr/share/icons/WhiteSur-cursors
 require_any_path \
   /etc/systemd/system/multi-user.target.wants/scx_loader.service \
