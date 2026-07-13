@@ -1,53 +1,154 @@
 name: bluebuild
+
 on:
   schedule:
-    - cron:
-        "00 06 * * *" # build at 06:00 UTC every day
-        # (20 minutes after last ublue images start building)
+    - cron: "00 06 * * *" # build at 06:00 UTC every day
   push:
-    paths-ignore: # don't rebuild if only documentation has changed
+    branches:
+      - main
+    paths-ignore:
       - "**.md"
-
-  pull_request:
-  workflow_dispatch: # allow manually triggering builds
+  workflow_dispatch:
 
 concurrency:
-  # only run one build at a time
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  IMAGE_TAG: latest
+
 jobs:
-  bluebuild:
-    name: Build Custom Image
+  build:
+    name: Build and publish image
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: write
       id-token: write
-    strategy:
-      fail-fast: false # stop GH from cancelling all matrix builds if one fails
-      matrix:
-        recipe:
-          # !! Add your recipes here
-          - recipe.yml
     steps:
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          large-packages: true
-          docker-images: false
-
       - name: Build Custom Image
-        uses: blue-build/github-action@v1.11.1
+        uses: blue-build/github-action@v1.12.0
         with:
-          recipe: ${{ matrix.recipe }}
+          recipe: recipe.yml
           cosign_private_key: ${{ secrets.SIGNING_SECRET }}
           registry_token: ${{ github.token }}
-          pr_event_number: ${{ github.event.number }}
-
-          # enabled by default, disable if your image is small and you want faster builds
+          pr_event_number: ${{ github.run_number }}
           maximize_build_space: true
           retry_push_count: 3
           use_cache: true
           verify_install: true
+
+  resolve-image:
+    name: Resolve published image digest
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      tagged_image: ${{ steps.resolve.outputs.tagged_image }}
+      image: ${{ steps.resolve.outputs.image }}
+      digest: ${{ steps.resolve.outputs.digest }}
+    steps:
+      - name: Install skopeo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo jq
+
+      - name: Resolve immutable image reference
+        id: resolve
+        run: |
+          set -euo pipefail
+          TAGGED_IMAGE="ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG}"
+          DIGEST="$(skopeo inspect "docker://${TAGGED_IMAGE}" | jq -r '.Digest')"
+          if [[ -z "${DIGEST}" || "${DIGEST}" == "null" ]]; then
+            echo "ERROR: failed to resolve digest for ${TAGGED_IMAGE}" >&2
+            exit 1
+          fi
+
+          {
+            echo "tagged_image=${TAGGED_IMAGE}"
+            echo "image=ghcr.io/${GITHUB_REPOSITORY}@${DIGEST}"
+            echo "digest=${DIGEST}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Validated image: ghcr.io/${GITHUB_REPOSITORY}@${DIGEST}"
+
+  smoke-validation:
+    name: Smoke validation
+    runs-on: ubuntu-latest
+    needs: resolve-image
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo podman jq
+
+      - name: Inspect image manifest
+        env:
+          IMAGE: ${{ needs.resolve-image.outputs.image }}
+        run: |
+          echo "=== Image Manifest ==="
+          skopeo inspect "docker://${IMAGE}" | jq '{Name, Digest, Created, Labels}'
+          echo "=== Image Tags ==="
+          skopeo inspect "docker://${IMAGE}" | jq -r '.RepoTags[]?' || true
+
+      - name: Run container smoke checks
+        env:
+          IMAGE: ${{ needs.resolve-image.outputs.image }}
+          MANIFEST_PATH: ${{ github.workspace }}/vibes-packages-manifest.txt
+        run: scripts/ci/container-smoke-test.sh
+
+      - name: Upload package manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-manifest
+          path: vibes-packages-manifest.txt
+          if-no-files-found: error
+
+  security-scan:
+    name: Security scan
+    runs-on: ubuntu-latest
+    needs: resolve-image
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ needs.resolve-image.outputs.image }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          timeout: 20m
+          exit-code: "0"
+
+      - name: Upload Trivy SARIF
+        if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Upload Trivy results
+        if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-results
+          path: trivy-results.sarif
+          if-no-files-found: error

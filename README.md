@@ -1,4 +1,4 @@
-# vibes &nbsp; [![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml) [![validate-image badge](https://github.com/mheci/vibes/actions/workflows/validate.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/validate.yml)
+# vibes &nbsp; [![repo-ci badge](https://github.com/mheci/vibes/actions/workflows/ci.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/ci.yml) [![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml) [![validate-image badge](https://github.com/mheci/vibes/actions/workflows/validate.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/validate.yml)
 
 Personal Bazzite NVIDIA Open gaming, media, and AI workstation image built with [BlueBuild](https://blue-build.org/).
 
@@ -39,17 +39,17 @@ To rebase an existing atomic Fedora installation to the latest build:
   systemctl reboot
   ```
 
-The `latest` tag will automatically point to the latest build. That build will still always use the Fedora version specified in `recipe.yml`, so you won't get accidentally updated to the next major version.
+The `latest` tag will automatically point to the latest build. That build will still always use the Fedora version specified in `recipes/recipe.yml`, so you won't get accidentally updated to the next major version.
 
 ## Validation
 
-Every successful build triggers a comprehensive validation pipeline:
+The pipeline is intentionally split into three layers so PR checks stay fast while release validation stays meaningful:
 
-- **Static validation**: cosign signature verification, bootc container lint, filesystem smoke checks, SBOM generation
-- **Security scanning**: Trivy + Grype CVE scans with SARIF upload
-- **KVM boot test**: Full qcow2 conversion and QEMU/KVM boot with nested virtualization on GitHub Actions
-- **In-VM automated QA**: SSH-based health checks for kernel panics, systemd failures, GPU acceleration, audio stack, and critical packages
-- **Regression detection**: Package manifest comparison between builds
+- **Repository CI (`repo-ci`)**: runs on pushes and pull requests to validate workflow YAML, shell syntax, and action wiring without needing signing secrets.
+- **Release pipeline (`bluebuild`)**: builds and publishes the image, resolves the pushed digest, runs `bootc container lint`, performs filesystem/package smoke checks, and uploads a package manifest artifact.
+- **Deep boot validation (`validate-image`)**: scheduled/manual qcow2 conversion plus QEMU/KVM boot with SSH-based in-VM QA for kernel, systemd, GPU, audio, and package health.
+
+Security scanning is handled in the release workflow with Trivy SARIF upload, while the heavier KVM integration test is isolated from normal publish runs to keep the production pipeline reliable.
 
 ## ISO
 

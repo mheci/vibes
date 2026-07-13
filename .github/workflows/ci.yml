@@ -1,0 +1,66 @@
+name: repo-ci
+
+on:
+  pull_request:
+  push:
+    paths:
+      - ".github/workflows/**"
+      - "files/**"
+      - "recipes/**"
+      - "scripts/**"
+      - "README.md"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  validate-repo:
+    name: Validate repository automation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install validation tooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck python3-yaml
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash | bash -s -- latest "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Ensure recipe exists
+        run: test -f recipes/recipe.yml
+
+      - name: Validate shell syntax
+        run: |
+          set -euo pipefail
+          find files/scripts scripts/ci -type f -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
+
+      - name: Run ShellCheck
+        run: shellcheck files/scripts/*.sh scripts/ci/*.sh
+
+      - name: Validate YAML syntax
+        run: |
+          python3 - <<'PY'
+          import glob
+          import yaml
+
+          paths = sorted(set(glob.glob('.github/workflows/*.yml') + glob.glob('**/*.yml', recursive=True)))
+          for path in paths:
+              with open(path, 'r', encoding='utf-8') as handle:
+                  yaml.safe_load(handle)
+          print(f"Validated YAML syntax for {len(paths)} files")
+          PY
+
+      - name: Run actionlint
+        run: actionlint -color

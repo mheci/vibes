@@ -182,6 +182,9 @@ if ! command -v heroic >/dev/null 2>&1 && ! command -v heroic-games-launcher >/d
   echo "WARN: Heroic launcher command not found after install" >&2
   missing=1
 fi
+if [[ "$missing" -ne 0 ]]; then
+  echo "WARN: one or more non-fatal application smoke checks reported missing commands" >&2
+fi
 if ! command -v bpftune >/dev/null 2>&1 && [[ ! -x /usr/sbin/bpftune ]]; then
   echo "ERROR: bpftune missing after build" >&2
   exit 1

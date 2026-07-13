@@ -124,7 +124,7 @@ qemu-system-x86_64 \
   -serial "file:$SERIAL_LOG" \
   -display none \
   -no-reboot \
-  -watchdog i6300esb \
+  -device i6300esb \
   -watchdog-action poweroff \
   -pidfile "$PIDFILE" \
   -daemonize 2>"$QEMU_LOG"
@@ -186,6 +186,7 @@ if [[ "$ssh_available" -eq 0 ]]; then
 fi
 
 # Run in-VM QA.
+qa_failed=0
 QA_SCRIPT="${GITHUB_WORKSPACE:-$(dirname "$0")}/vm-qa.sh"
 if [[ -f "$QA_SCRIPT" ]]; then
   echo "Copying vm-qa.sh into guest and executing..."
@@ -203,7 +204,7 @@ if [[ -f "$QA_SCRIPT" ]]; then
       -p "$SSH_PORT" \
       ci@localhost "bash /tmp/vm-qa.sh" || {
     echo "ERROR: in-VM QA script returned non-zero." >&2
-    ERR=1
+    qa_failed=1
   }
 
   # Pull logs back from guest.
@@ -243,6 +244,10 @@ done
 # Final post-boot QA pass over the captured console.
 if grep -Eaiq "$panic_re" "$SERIAL_LOG"; then
   fail "KVM boot validation found a failure pattern after success detection."
+fi
+
+if [[ "$qa_failed" -ne 0 ]]; then
+  fail "In-VM QA checks failed."
 fi
 
 # Print concise evidence into the job log.
