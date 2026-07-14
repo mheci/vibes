@@ -332,8 +332,6 @@ install_required_packages \
   vulkan-tools \
   wireplumber \
   words \
-  x264 \
-  x265 \
   xdg-desktop-portal-kde
 
 install_optional_packages \
