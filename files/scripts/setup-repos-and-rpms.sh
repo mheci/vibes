@@ -283,7 +283,6 @@ install_required_packages \
   ffmpeg \
   ffmpeg-libs \
   ffmpegthumbnailer \
-  gamescope \
   gamemode \
   gstreamer1-plugin-openh264 \
   gstreamer1-plugins-bad-free \
