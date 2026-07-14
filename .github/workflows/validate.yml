@@ -118,7 +118,7 @@ jobs:
           # Critical configs
           check_path /etc/pipewire/pipewire.conf.d/99-input-denoising.conf
           check_path /etc/scx_loader/config.toml
-          check_path /etc/profile.d/90-vibes-nvidia-accel.sh
+          check_path /etc/profile.d/90-vibes-desktop-env.sh
 
           # Critical RPMs
           if ! podman run --rm --pull=always --entrypoint /usr/bin/rpm "${IMAGE}" -q firefox >/dev/null 2>&1; then

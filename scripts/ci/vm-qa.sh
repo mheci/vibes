@@ -120,10 +120,10 @@ else
   warn "NVIDIA kernel modules not loaded (may be expected in CI without GPU passthrough)"
 fi
 
-if [[ -f /etc/profile.d/90-vibes-nvidia-accel.sh ]]; then
-  pass "NVIDIA acceleration profile script present"
+if [[ -f /etc/profile.d/90-vibes-desktop-env.sh ]]; then
+  pass "Desktop acceleration profile script present"
 else
-  fail "NVIDIA acceleration profile script missing"
+  fail "Desktop acceleration profile script missing"
 fi
 
 # 7. Audio stack
