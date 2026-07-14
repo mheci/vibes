@@ -61,16 +61,23 @@ enable_repo_if_present() {
   fi
 }
 
-import_gpg_key_url() {
-  local key_url="$1" tmp
-  local releasever basearch expanded
+expand_repo_variables() {
+  local value="$1"
+  local releasever basearch
   releasever="$(rpm -E %fedora)"
   basearch="$(rpm -E %_arch)"
-  expanded="$key_url"
-  expanded="${expanded//\$releasever/$releasever}"
-  expanded="${expanded//\$basearch/$basearch}"
-  expanded="${expanded//\${releasever}/$releasever}"
-  expanded="${expanded//\${basearch}/$basearch}"
+
+  value="${value//\$\{releasever\}/$releasever}"
+  value="${value//\$\{basearch\}/$basearch}"
+  value="${value//\$releasever/$releasever}"
+  value="${value//\$basearch/$basearch}"
+
+  printf '%s\n' "$value"
+}
+
+import_gpg_key_url() {
+  local key_url="$1" tmp expanded
+  expanded="$(expand_repo_variables "$key_url")"
 
   case "$expanded" in
     http://*|https://*)
