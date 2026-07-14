@@ -61,7 +61,7 @@ fi
 
 # 4. Critical binaries
 CRITICAL_BINS=(
-  kitty firefox waterfox brave-origin
+  kitty firefox brave-origin
   code zed opencode lmstudio vicinae
   umu-launcher faugus-launcher
   heroic heroic-games-launcher

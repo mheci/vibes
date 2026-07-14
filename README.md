@@ -1,64 +1,103 @@
-# vibes &nbsp; [![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml) [![validate-image badge](https://github.com/mheci/vibes/actions/workflows/validate.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/validate.yml)
+# ✨ vibes
 
-Personal Bazzite NVIDIA Open gaming, media, and AI workstation image built with [BlueBuild](https://blue-build.org/).
+### *vibe-code your way to the perfect desktop* 🚀
 
-Current base: `ghcr.io/ublue-os/bazzite-nvidia-open:latest` → published as `ghcr.io/mheci/vibes`.
+[![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml) [![validate-image badge](https://github.com/mheci/vibes/actions/workflows/validate.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/validate.yml)
 
-## What's inside
+> **the vibe**: a buttery-smooth, gpu-accelerated, ai-ready workstation that just *feels* right.
 
-- **Base**: Bazzite NVIDIA Open (latest)
-- **Browsers**: Firefox (RPM), Brave Origin (with uBlock Origin policy), Waterfox (RPM + Flatpak)
-- **Development**: VS Code, Zed, opencode CLI + Desktop, Heroic Games Launcher
-- **AI**: LM Studio, Vicinae launcher
-- **Gaming**: Faugus Launcher, umu-launcher, LACT, MangoHud, GameScope, scx LAVD scheduler (performance mode)
-- **Audio**: High-quality PipeWire + WirePlumber configs, RNNoise stereo noise suppression
-- **GPU**: NVIDIA Open kernel modules, VAAPI/VDPAU/NVD acceleration defaults
-- **Themes**: Darkly, Beauty-Plasma-Themes, macOS cursor packs
-- **System**: bpftune enabled, comprehensive codec & thumbnail support, nerd fonts, Arabic + English spellcheck
+built on [bluebuild](https://blue-build.org/) and [bazzite](https://bazzite.gg/) — because life's too short for broken configs and boot loops.
 
-## Installation
+---
 
-> [!WARNING]  
-> [This is an experimental feature](https://www.fedoraproject.org/wiki/Changes/OstreeNativeContainerStable), try at your own discretion.
+## 🎨 what's the vibe?
 
-To rebase an existing atomic Fedora installation to the latest build:
+```
+ghcr.io/ublue-os/bazzite-nvidia-open:latest → ghcr.io/mheci/vibes
+```
 
-- First rebase to the unsigned image, to get the proper signing keys and policies installed:
-  ```
-  rpm-ostree rebase ostree-unverified-registry:ghcr.io/mheci/vibes:latest
-  ```
-- Reboot to complete the rebase:
-  ```
-  systemctl reboot
-  ```
-- Then rebase to the signed image, like so:
-  ```
-  rpm-ostree rebase ostree-image-signed:docker://ghcr.io/mheci/vibes:latest
-  ```
-- Reboot again to complete the installation:
-  ```
-  systemctl reboot
-  ```
+### 🎮 gaming
+heroic games launcher · faugus launcher · umu-launcher · lact gpu control · mangohud · gamescope · scx lavd scheduler (gaming mode, always performance)
 
-The `latest` tag will automatically point to the latest build. That build will still always use the Fedora version specified in `recipe.yml`, so you won't get accidentally updated to the next major version.
+### 💻 development
+vs code · zed · opencode cli + desktop · kitty terminal
 
-## Validation
+### 🤖 ai / ml
+lm studio · vicinae launcher · nvidia container toolkit
 
-Every successful build triggers a comprehensive validation pipeline:
+### 🌐 browsing
+firefox (rpm, hardware-accelerated) · brave origin (ublock origin pre-installed)
 
-- **Static validation**: cosign signature verification, `bootc container lint`, filesystem smoke checks for critical binaries and configs
-- **Security scanning**: Trivy CVE scan (CRITICAL + HIGH, unfixed only) with SARIF upload to GitHub Security tab
-- **KVM boot test**: Full qcow2 conversion via `bootc-image-builder` and QEMU/KVM boot with nested virtualization
-- **In-VM QA**: SSH-based health checks — kernel panics, systemd failures, GPU acceleration, audio stack, critical packages, fonts, spellcheck dictionaries
+### 🎵 audio
+pipewire + wireplumber tuned for low-latency · rnnoise stereo noise suppression · realtime scheduling · 48khz default · bluetooth a2dp-first
 
-## ISO
+### 🖥️ desktop polish
+darkly theme · beauty-plasma-themes · macos cursor packs · qt disk shader cache force-enabled · nvidia vaapi/vdpau/nvd acceleration · wayland-first
 
-If building on Fedora Atomic, you can generate an offline ISO with the instructions available [here](https://blue-build.org/how-to/generate-iso/#_top). These ISOs cannot be distributed on GitHub for free due to large sizes, so for public projects something else has to be used for hosting.
+### 📦 multimedia
+ffmpeg · gstreamer full suite · vaapi · h264/h265/av1/vp9 · thumbnails for everything · heif/jxl/webp/raw support
 
-## Verification
+### 🔤 fonts & language
+nerd fonts · jetbrains mono · fira code · cascadia code · noto arabic · hunspell en + ar spellcheck
 
-These images are signed with [Sigstore](https://www.sigstore.dev/)'s [cosign](https://github.com/sigstore/cosign). You can verify the signature by downloading the `cosign.pub` file from this repo and running the following command:
+---
+
+## 🚀 installation
+
+> ⚠️ **atomic rebasing is experimental** — you've been warned
+
+rebase an existing atomic fedora install to the latest build:
 
 ```bash
+# step 1: rebase to unsigned image (gets signing keys installed)
+rpm-ostree rebase ostree-unverified-registry:ghcr.io/mheci/vibes:latest
+
+# step 2: reboot
+systemctl reboot
+
+# step 3: rebase to signed image (verifies the real deal)
+rpm-ostree rebase ostree-image-signed:docker://ghcr.io/mheci/vibes:latest
+
+# step 4: final reboot
+systemctl reboot
+```
+
+*the `latest` tag always points to the most recent build. you won't accidentally jump major versions.*
+
+---
+
+## 🧪 validation
+
+every build gets the full treatment:
+
+| check | what it does |
+|-------|--------------|
+| 🔐 **cosign verify** | signature verification via sigstore |
+| 🔍 **bootc lint** | container image sanity checks |
+| 📁 **filesystem smoke** | critical binaries + configs exist |
+| 🛡️ **trivy cve scan** | critical + high vulns → sarif uploaded |
+| 🖥️ **kvm boot test** | full qcow2 → qemu/kvm boot |
+| 🏥 **in-vm qa** | ssh-based health: kernel panics, systemd, gpu, audio, packages |
+
+---
+
+## 📀 iso generation
+
+building on fedora atomic? generate an offline iso with the [bluebuild iso guide](https://blue-build.org/how-to/generate-iso/).
+
+> *github's free tier can't host large isos — you'll need your own storage.*
+
+---
+
+## 🔐 verification
+
+images are signed with [sigstore](https://www.sigstore.dev/)'s [cosign](https://github.com/sigstore/cosign).
+
+```bash
+# grab the public key from this repo, then:
 cosign verify --key cosign.pub ghcr.io/mheci/vibes
 ```
+
+---
+
+*no waterfox. no fluff. just vibes.* ✨

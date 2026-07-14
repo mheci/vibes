@@ -59,22 +59,12 @@ gpgkey=https://packages.microsoft.com/keys/microsoft.asc
 skip_if_unavailable=True
 REPO
 
-cat >/etc/yum.repos.d/waterfox.repo <<'REPO'
-[waterfox]
-name=Waterfox
-baseurl=https://repo.waterfox.net/fedora/$releasever/
-enabled=1
-gpgcheck=1
-gpgkey=https://repo.waterfox.net/key.asc
-skip_if_unavailable=True
-REPO
-
 # =============================================================================
 # COPR repositories
 # =============================================================================
 echo "--- Enabling COPR repositories ---"
 
-retry "${DNF[@]}" install --skip-unavailable dnf5-plugins dnf-plugins-core
+retry "${DNF[@]}" install --skip-unavailable dnf5-plugins dnf-plugins-core || true
 
 add_copr faugus/faugus-launcher
 add_copr ilyaz/LACT
@@ -83,11 +73,11 @@ add_copr che/nerd-fonts
 
 # Enable terra repo if present (provided by base image)
 if [[ -f /etc/yum.repos.d/terra.repo ]]; then
-  sed -i 's/^enabled=0/enabled=1/' /etc/yum.repos.d/terra.repo
+  sed -i 's/^enabled=0/enabled=1/' /etc/yum.repos.d/terra.repo || true
 fi
 
 # Enable Cisco OpenH264 (required for WebRTC video)
-"${DNF[@]}" config-manager setopt fedora-cisco-openh264.enabled=1
+"${DNF[@]}" config-manager setopt fedora-cisco-openh264.enabled=1 || true
 
 retry "${DNF[@]}" makecache
 
@@ -112,9 +102,7 @@ install_available() {
   if ! retry "${DNF[@]}" install "${available[@]}"; then
     echo "WARN: batch install failed; retrying packages one-by-one" >&2
     for pkg in "${available[@]}"; do
-      if ! "${DNF[@]}" install --skip-unavailable "$pkg"; then
-        echo "WARN: failed to install optional package: $pkg" >&2
-      fi
+      "${DNF[@]}" install --skip-unavailable "$pkg" || echo "WARN: failed to install optional package: $pkg" >&2
     done
   fi
 }
@@ -126,19 +114,17 @@ echo "--- Installing Firefox RPM ---"
 
 # Remove Flatpak Firefox if present (prefer native RPM for codec support)
 if command -v flatpak >/dev/null 2>&1; then
-  if flatpak list --system | grep -q org.mozilla.firefox; then
-    flatpak uninstall --system -y org.mozilla.firefox
+  if flatpak list --system 2>/dev/null | grep -q org.mozilla.firefox; then
+    flatpak uninstall --system -y org.mozilla.firefox || true
   fi
 fi
 
 # Remove conflicting openh264 packages before installing Firefox RPM
 if rpm -q openh264 mozilla-openh264 gstreamer1-plugin-openh264 >/dev/null 2>&1; then
-  "${DNF[@]}" remove --no-autoremove openh264 mozilla-openh264 gstreamer1-plugin-openh264
+  "${DNF[@]}" remove --no-autoremove openh264 mozilla-openh264 gstreamer1-plugin-openh264 || true
 fi
 
 retry "${DNF[@]}" install firefox || retry "${DNF[@]}" install --setopt=install_weak_deps=False firefox
-
-install_available waterfox
 
 # =============================================================================
 # NVIDIA drivers and GPU acceleration
@@ -232,7 +218,7 @@ JSON
 cp /etc/brave/policies/managed/10-ublock-origin.json /etc/chromium/policies/managed/10-ublock-origin.json
 
 # Firefox: enable VA-API and WebRender
-install -d -m 0755 /usr/lib64/firefox/distribution /usr/lib/firefox/distribution
+install -d -m 0755 /usr/lib64/firefox/distribution
 cat >/usr/lib64/firefox/distribution/policies.json <<'JSON'
 {
   "policies": {
@@ -246,15 +232,16 @@ cat >/usr/lib64/firefox/distribution/policies.json <<'JSON'
 }
 JSON
 if [[ -d /usr/lib/firefox/distribution ]]; then
-  cp /usr/lib64/firefox/distribution/policies.json /usr/lib/firefox/distribution/policies.json
+  cp /usr/lib64/firefox/distribution/policies.json /usr/lib/firefox/distribution/policies.json || true
 fi
 
 # =============================================================================
-# NVIDIA acceleration environment variables
+# Desktop environment variables (NVIDIA + Qt shader cache)
 # =============================================================================
-echo "--- Configuring NVIDIA acceleration environment ---"
+echo "--- Configuring desktop environment variables ---"
 
-cat >/etc/profile.d/90-vibes-nvidia-accel.sh <<'EOFENV'
+cat >/etc/profile.d/90-vibes-desktop-env.sh <<'EOFENV'
+# NVIDIA hardware acceleration
 export MOZ_ENABLE_WAYLAND=1
 export MOZ_WEBRENDER=1
 export LIBVA_DRIVER_NAME=nvidia
@@ -262,11 +249,14 @@ export VDPAU_DRIVER=nvidia
 export __GLX_VENDOR_LIBRARY_NAME=nvidia
 export GBM_BACKEND=nvidia-drm
 export NVD_BACKEND=direct
+
+# Qt disk shader cache (force-enable for smoother desktop and app launches)
+export QSG_DISK_CACHE=1
 EOFENV
-chmod 0644 /etc/profile.d/90-vibes-nvidia-accel.sh
+chmod 0644 /etc/profile.d/90-vibes-desktop-env.sh
 
 install -d -m 0755 /etc/environment.d
-cat >/etc/environment.d/90-vibes-nvidia-accel.conf <<'EOFENV'
+cat >/etc/environment.d/90-vibes-desktop-env.conf <<'EOFENV'
 MOZ_ENABLE_WAYLAND=1
 MOZ_WEBRENDER=1
 LIBVA_DRIVER_NAME=nvidia
@@ -274,6 +264,7 @@ VDPAU_DRIVER=nvidia
 __GLX_VENDOR_LIBRARY_NAME=nvidia
 GBM_BACKEND=nvidia-drm
 NVD_BACKEND=direct
+QSG_DISK_CACHE=1
 EOFENV
 
 # =============================================================================
@@ -321,15 +312,14 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 UNIT
-  ln -sf /usr/lib/systemd/system/scx-lavd.service /etc/systemd/system/multi-user.target.wants/scx-lavd.service
+  ln -sf /usr/lib/systemd/system/scx-lavd.service /etc/systemd/system/multi-user.target.wants/scx-lavd.service || true
 fi
 
 # =============================================================================
 # Cleanup
 # =============================================================================
 echo "--- Cleaning up ---"
-"${DNF[@]}" clean all
+"${DNF[@]}" clean all || true
 # Note: /var/cache/libdnf5 is a BuildKit cache mount and cannot be removed.
-# The cache is managed by the build system for layer reuse.
 
 echo "=== Repositories and RPM packages configured successfully ==="

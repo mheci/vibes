@@ -27,38 +27,43 @@ retry() {
 
 # --- Darkly (Plasma window decoration + color scheme) ---
 echo "Installing Darkly theme..."
-retry git clone --depth 1 https://github.com/Bali10050/Darkly /tmp/darkly
+retry git clone --depth 1 https://github.com/Bali10050/Darkly /tmp/darkly || {
+  echo "WARN: failed to clone Darkly theme" >&2
+}
 
 if [[ -d /tmp/darkly/color-schemes ]]; then
-  cp -a /tmp/darkly/color-schemes/. /usr/share/color-schemes/
+  cp -a /tmp/darkly/color-schemes/. /usr/share/color-schemes/ || true
 fi
 if [[ -d /tmp/darkly/plasma/desktoptheme ]]; then
-  cp -a /tmp/darkly/plasma/desktoptheme/. /usr/share/plasma/desktoptheme/
+  cp -a /tmp/darkly/plasma/desktoptheme/. /usr/share/plasma/desktoptheme/ || true
 fi
 if [[ -d /tmp/darkly/plasma/look-and-feel ]]; then
-  cp -a /tmp/darkly/plasma/look-and-feel/. /usr/share/plasma/look-and-feel/
+  cp -a /tmp/darkly/plasma/look-and-feel/. /usr/share/plasma/look-and-feel/ || true
 fi
-rm -rf /tmp/darkly
+rm -rf /tmp/darkly || true
 echo "Darkly theme installed."
 
 # --- Beauty-Plasma-Themes ---
 echo "Installing Beauty-Plasma-Themes..."
-retry git clone --depth 1 https://github.com/L4ki/Beauty-Plasma-Themes /tmp/beauty
+retry git clone --depth 1 https://github.com/L4ki/Beauty-Plasma-Themes /tmp/beauty || {
+  echo "WARN: failed to clone Beauty-Plasma-Themes" >&2
+}
 
-# Copy theme directories individually to preserve structure
-for dir in /tmp/beauty/*/; do
-  dirname="$(basename "$dir")"
-  if [[ -d "$dir/plasma" ]]; then
-    # This is a theme directory with plasma subfolder
-    cp -a "$dir" "/usr/share/plasma/desktoptheme/${dirname}" 2>/dev/null || true
+if [[ -d /tmp/beauty ]]; then
+  # Copy theme directories individually to preserve structure
+  for dir in /tmp/beauty/*/; do
+    dirname="$(basename "$dir")"
+    if [[ -d "$dir/plasma" ]]; then
+      cp -a "$dir" "/usr/share/plasma/desktoptheme/${dirname}" 2>/dev/null || true
+    fi
+  done
+
+  # Also copy any top-level plasma/desktoptheme entries
+  if [[ -d /tmp/beauty/plasma/desktoptheme ]]; then
+    cp -a /tmp/beauty/plasma/desktoptheme/. /usr/share/plasma/desktoptheme/ 2>/dev/null || true
   fi
-done
-
-# Also copy any top-level plasma/desktoptheme entries
-if [[ -d /tmp/beauty/plasma/desktoptheme ]]; then
-  cp -a /tmp/beauty/plasma/desktoptheme/. /usr/share/plasma/desktoptheme/ 2>/dev/null || true
+  rm -rf /tmp/beauty || true
 fi
-rm -rf /tmp/beauty
 echo "Beauty-Plasma-Themes installed."
 
 # --- macOS cursor themes ---
@@ -67,9 +72,12 @@ CURSOR_BASE="https://github.com/ful1e5/apple_cursor/releases/download/v2.0.0"
 
 for theme in macOS-BigSur macOS-Monterey; do
   echo "  Downloading ${theme}..."
-  retry curl -fL -o "/tmp/${theme}.tar.gz" "${CURSOR_BASE}/${theme}.tar.gz"
-  tar -xzf "/tmp/${theme}.tar.gz" -C /usr/share/icons/
-  rm -f "/tmp/${theme}.tar.gz"
+  if retry curl -fL -o "/tmp/${theme}.tar.gz" "${CURSOR_BASE}/${theme}.tar.gz"; then
+    tar -xzf "/tmp/${theme}.tar.gz" -C /usr/share/icons/ || true
+    rm -f "/tmp/${theme}.tar.gz"
+  else
+    echo "  WARN: failed to download ${theme} cursor theme" >&2
+  fi
 done
 
 echo "=== Desktop themes installed successfully ==="

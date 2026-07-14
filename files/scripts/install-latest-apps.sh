@@ -137,9 +137,9 @@ install_latest_appimage "vicinaehq/vicinae" 'Vicinae-x86_64\.AppImage$' "vicinae
 
 # --- opencode CLI ---
 echo "Installing opencode CLI..."
-retry bash -c 'curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=/usr/bin bash'
+retry bash -c 'curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=/usr/bin bash' || true
 if [[ -x /root/.opencode/bin/opencode && ! -x /usr/bin/opencode ]]; then
-  install -Dm755 /root/.opencode/bin/opencode /usr/bin/opencode
+  install -Dm755 /root/.opencode/bin/opencode /usr/bin/opencode || true
 fi
 
 # --- RNNoise LADSPA plugin (audio noise suppression) ---
@@ -166,7 +166,7 @@ rm -rf /tmp/bpftune
 retry git clone --depth 1 https://github.com/oracle/bpftune.git /tmp/bpftune
 make -C /tmp/bpftune -j"$(nproc)"
 make -C /tmp/bpftune install
-ldconfig
+ldconfig || true
 
 # Enable bpftune service
 install -d -m 0755 /etc/systemd/system/multi-user.target.wants
@@ -244,7 +244,7 @@ if [[ $errors -gt 0 ]]; then
 fi
 
 # Cleanup
-"${DNF[@]}" clean all
+"${DNF[@]}" clean all || true
 # Note: /var/cache/libdnf5 is a BuildKit cache mount and cannot be removed.
 
 echo "=== Latest applications installed successfully ==="
