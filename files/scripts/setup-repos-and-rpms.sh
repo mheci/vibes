@@ -114,9 +114,14 @@ add_copr() {
   retry "${DNF[@]}" copr enable "$copr"
 }
 
+package_available_in_repos() {
+  local pkg="$1"
+  "${DNF[@]}" repoquery --qf '%{name}' --available "$pkg" 2>/dev/null | grep -Fxq "$pkg"
+}
+
 package_available_or_installed() {
   local pkg="$1"
-  rpm -q "$pkg" >/dev/null 2>&1 || "${DNF[@]}" repoquery --available "$pkg" >/dev/null 2>&1
+  rpm -q "$pkg" >/dev/null 2>&1 || package_available_in_repos "$pkg"
 }
 
 install_required_packages() {
@@ -161,7 +166,7 @@ install_first_available_package() {
       log "Package already installed: $pkg"
       return 0
     fi
-    if "${DNF[@]}" repoquery --available "$pkg" >/dev/null 2>&1; then
+    if package_available_in_repos "$pkg"; then
       retry "${DNF[@]}" install "$pkg"
       return 0
     fi
