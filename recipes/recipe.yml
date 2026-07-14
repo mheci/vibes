@@ -31,7 +31,6 @@ modules:
         destination: /
 
   # Keep signed-image policy support after all customizations.
-  - type: signing
 
   # bootc-recommended sanity checks at image build time.
   - type: containerfile
