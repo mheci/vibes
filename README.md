@@ -70,14 +70,28 @@ systemctl reboot
 
 every build gets the full treatment:
 
+### 📋 static validation
 | check | what it does |
 |-------|--------------|
 | 🔐 **cosign verify** | signature verification via sigstore |
 | 🔍 **bootc lint** | container image sanity checks |
 | 📁 **filesystem smoke** | critical binaries + configs exist |
-| 🛡️ **trivy cve scan** | critical + high vulns → sarif uploaded |
-| 🖥️ **kvm boot test** | full qcow2 → qemu/kvm boot |
-| 🏥 **in-vm qa** | ssh-based health: kernel panics, systemd, gpu, audio, packages |
+
+### 🛡️ security scanning
+| tool | what it does |
+|------|--------------|
+| **trivy** | CVE vulnerability scan → SARIF uploaded to GitHub Security tab |
+| **grype** | alternative CVE scanner with JSON + SARIF reports |
+| **syft** | SBOM generation (CycloneDX + SPDX formats) |
+| **clamav** | malware scan on extracted image filesystem |
+
+### 🖥️ boot validation
+| check | what it does |
+|-------|--------------|
+| **kvm boot test** | full qcow2 → qemu/kvm boot |
+| **in-vm qa** | ssh-based health: kernel panics, systemd, gpu, audio, packages |
+
+all security scan results are uploaded as artifacts (90-day retention) and SARIF reports feed into GitHub's Security tab for vulnerability tracking.
 
 ---
 
