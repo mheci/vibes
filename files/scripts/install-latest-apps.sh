@@ -49,7 +49,9 @@ retry() {
 
 github_headers() {
   local headers=(-H 'Accept: application/vnd.github+json' -H 'User-Agent: vibes-bluebuild')
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    headers+=(-H "Authorization: Bearer ${GH_TOKEN}")
+  elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
     headers+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
   elif [[ -n "${GH_PAT:-}" ]]; then
     headers+=(-H "Authorization: Bearer ${GH_PAT}")

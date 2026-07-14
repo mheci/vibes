@@ -161,16 +161,21 @@ install_optional_packages() {
 
 install_first_available_package() {
   local pkg
+
   for pkg in "$@"; do
     if rpm -q "$pkg" >/dev/null 2>&1; then
-      log "Package already installed: $pkg"
+      log "Alternative package already installed: $pkg"
       return 0
     fi
+  done
+
+  for pkg in "$@"; do
     if package_available_in_repos "$pkg"; then
       retry "${DNF[@]}" install "$pkg"
       return 0
     fi
   done
+
   warn "none of the alternative packages were available: $*"
   return 0
 }
@@ -364,8 +369,6 @@ install_optional_packages \
   gstreamer1-plugins-bad-freeworld \
   gstreamer1-plugins-ugly \
   heif-pixbuf-loader \
-  heroic \
-  heroic-games-launcher \
   hyphen-ar \
   inter-fonts \
   kf5-kcmutils-devel \
