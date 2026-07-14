@@ -329,6 +329,7 @@ fi
 # =============================================================================
 echo "--- Cleaning up ---"
 "${DNF[@]}" clean all
-rm -rf /var/cache/dnf /var/cache/libdnf5
+# Note: /var/cache/libdnf5 is a BuildKit cache mount and cannot be removed.
+# The cache is managed by the build system for layer reuse.
 
 echo "=== Repositories and RPM packages configured successfully ==="
