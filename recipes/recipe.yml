@@ -1,0 +1,38 @@
+---
+# yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
+version: 1
+name: vibes
+description: Bazzite NVIDIA Open gaming, media, and AI workstation image built with BlueBuild.
+
+base-image: ghcr.io/ublue-os/bazzite-nvidia-open
+image-version: latest
+
+modules:
+  - type: script
+    scripts:
+      - setup-repos-and-rpms.sh
+
+  - type: script
+    scripts:
+      - install-latest-apps.sh
+
+  - type: script
+    scripts:
+      - install-themes.sh
+
+  - type: default-flatpaks
+    configurations:
+      - notify: true
+        scope: system
+        install:
+          - org.gnome.Loupe
+      - scope: user
+
+  - type: files
+    files:
+      - source: system
+        destination: /
+
+  - type: containerfile
+    snippets:
+      - RUN bootc container lint
