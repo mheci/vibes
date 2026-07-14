@@ -2,7 +2,7 @@
 
 ### *vibe-code your way to the perfect desktop* 🚀
 
-[![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml) [![validate-image badge](https://github.com/mheci/vibes/actions/workflows/validate.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/validate.yml)
+[![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml) [![iso build badge](https://github.com/mheci/vibes/actions/workflows/iso.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/iso.yml)
 
 > **the vibe**: a buttery-smooth, gpu-accelerated, ai-ready workstation that just *feels* right.
 
@@ -44,6 +44,10 @@ nerd fonts · jetbrains mono · fira code · cascadia code · noto arabic · hun
 
 ## 🚀 installation
 
+### via iso
+download the latest iso from the [actions tab](https://github.com/mheci/vibes/actions/workflows/iso.yml) (click the most recent successful run → artifacts section at the bottom), flash it to a usb with [fedora media writer](https://www.fedoraproject.org/en/workstation/download) or [balena etcher](https://etcher.balena.io/), and boot it.
+
+### via rebase
 > ⚠️ **atomic rebasing is experimental** — you've been warned
 
 rebase an existing atomic fedora install to the latest build:
@@ -63,43 +67,6 @@ systemctl reboot
 ```
 
 *the `latest` tag always points to the most recent build. you won't accidentally jump major versions.*
-
----
-
-## 🧪 validation
-
-every build gets the full treatment:
-
-### 📋 static validation
-| check | what it does |
-|-------|--------------|
-| 🔐 **cosign verify** | signature verification via sigstore |
-| 🔍 **bootc lint** | container image sanity checks |
-| 📁 **filesystem smoke** | critical binaries + configs exist |
-
-### 🛡️ security scanning
-| tool | what it does |
-|------|--------------|
-| **trivy** | CVE vulnerability scan → SARIF uploaded to GitHub Security tab |
-| **grype** | alternative CVE scanner with JSON + SARIF reports |
-| **syft** | SBOM generation (CycloneDX + SPDX formats) |
-| **clamav** | malware scan on extracted image filesystem |
-
-### 🖥️ boot validation
-| check | what it does |
-|-------|--------------|
-| **kvm boot test** | full qcow2 → qemu/kvm boot |
-| **in-vm qa** | ssh-based health: kernel panics, systemd, gpu, audio, packages |
-
-all security scan results are uploaded as artifacts (90-day retention) and SARIF reports feed into GitHub's Security tab for vulnerability tracking.
-
----
-
-## 📀 iso generation
-
-building on fedora atomic? generate an offline iso with the [bluebuild iso guide](https://blue-build.org/how-to/generate-iso/).
-
-> *github's free tier can't host large isos — you'll need your own storage.*
 
 ---
 

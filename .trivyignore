@@ -1,9 +1,0 @@
-# Trivy ignore file for vibes image
-# List CVE IDs or vulnerability check IDs to suppress.
-# Each line is one ignored finding.
-#
-# Format: CVE-YYYY-NNNNN or AVD-XXX-NNNN
-#
-# Example:
-# CVE-2023-44487  # HTTP/2 rapid reset - mitigated at load balancer
-# AVD-AWS-0086    # Not applicable to this image

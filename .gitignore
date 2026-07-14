@@ -3,4 +3,3 @@ cosign.private
 /Containerfile
 *.iso
 *.iso-CHECKSUM
-kvm-boot-work/
