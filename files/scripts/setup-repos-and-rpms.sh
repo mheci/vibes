@@ -317,7 +317,6 @@ install_required_packages \
   mangohud \
   mesa-dri-drivers \
   mesa-vulkan-drivers \
-  mozilla-openh264 \
   pipewire \
   pipewire-alsa \
   pipewire-jack-audio-connection-kit \
