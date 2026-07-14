@@ -129,7 +129,7 @@ install_darkly() {
   if [[ -n "$url" && "$url" != "null" ]]; then
     rpm_file="/tmp/darkly-${fedora_release}.rpm"
     download_github_asset 'Bali10050/Darkly' "darkly-.*\.fc${fedora_release}\.x86_64\.rpm$" "$rpm_file"
-    retry "${DNF[@]}" install --skip-unavailable "$rpm_file"
+    retry "${DNF[@]}" install "$rpm_file"
     rm -f "$rpm_file"
     return 0
   fi

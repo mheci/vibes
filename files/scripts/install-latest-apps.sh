@@ -113,7 +113,7 @@ install_latest_rpm() {
   local repo="$1" pattern="$2" name="$3"
   local rpm="/tmp/${name}.rpm"
   download_github_asset "$repo" "$pattern" "$rpm"
-  retry "${DNF[@]}" install --skip-unavailable "$rpm"
+  retry "${DNF[@]}" install "$rpm"
   rm -f "$rpm"
 }
 
