@@ -16,6 +16,9 @@ env:
   IMAGE_BASE: ghcr.io/${{ github.repository }}
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Resolve the image tag to test
+  # ---------------------------------------------------------------------------
   metadata:
     name: Resolve image reference
     runs-on: ubuntu-latest
@@ -32,6 +35,7 @@ jobs:
       - name: Resolve image tag
         id: resolve
         run: |
+          set -euo pipefail
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             SHA="${{ github.event.workflow_run.head_sha }}"
             IMAGE="${IMAGE_BASE}:${SHA}"
@@ -47,6 +51,9 @@ jobs:
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
           echo "Testing image: ${IMAGE} (sha: ${SHA})"
 
+  # ---------------------------------------------------------------------------
+  # Static bootc/container validation
+  # ---------------------------------------------------------------------------
   static-validation:
     name: Static bootc/container validation
     runs-on: ubuntu-latest
@@ -132,8 +139,45 @@ jobs:
           fi
           echo "All smoke checks passed."
 
-  security-scan:
-    name: Security / CVE scan
+  # ---------------------------------------------------------------------------
+  # Syft — Software Bill of Materials (SBOM) generation
+  # ---------------------------------------------------------------------------
+  sbom-generation:
+    name: SBOM generation (Syft)
+    runs-on: ubuntu-latest
+    needs: [metadata, static-validation]
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ needs.metadata.outputs.image }}
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ needs.metadata.outputs.image }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            sbom.cdx.json
+            sbom.spdx.json
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # Trivy — CVE vulnerability scanner (image)
+  # ---------------------------------------------------------------------------
+  trivy-scan:
+    name: CVE scan (Trivy)
     runs-on: ubuntu-latest
     needs: [metadata, static-validation]
     permissions:
@@ -144,24 +188,195 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run Trivy CVE scan
-        uses: aquasecurity/trivy-action@0.28.0
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
         with:
-          scan-type: image
           image-ref: ${{ needs.metadata.outputs.image }}
+          scan-type: image
+          scanners: vuln,secret,misconfig
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: 0
           format: sarif
           output: trivy-results.sarif
 
-      - name: Upload Trivy SARIF
+      - name: Run Trivy table report (log to CI output)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.metadata.outputs.image }}
+          scan-type: image
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: table
+
+      - name: Upload Trivy SARIF to GitHub Security
         if: always()
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
+          category: trivy
 
+      - name: Upload Trivy SARIF as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sarif
+          path: trivy-results.sarif
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # Grype — CVE vulnerability scanner (alternative engine)
+  # ---------------------------------------------------------------------------
+  grype-scan:
+    name: CVE scan (Grype)
+    runs-on: ubuntu-latest
+    needs: [metadata, static-validation]
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Scan image with Grype
+        uses: anchore/scan-action@v7
+        id: grype
+        with:
+          image: ${{ needs.metadata.outputs.image }}
+          fail-build: false
+          severity-cutoff: high
+          output-format: sarif
+          cache-db: true
+
+      - name: Upload Grype SARIF to GitHub Security
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+          category: grype
+
+      - name: Upload Grype SARIF as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype-sarif
+          path: ${{ steps.grype.outputs.sarif }}
+          retention-days: 90
+
+      - name: Upload Grype JSON report
+        if: always()
+        uses: anchore/scan-action@v7
+        with:
+          image: ${{ needs.metadata.outputs.image }}
+          fail-build: false
+          severity-cutoff: high
+          output-format: json
+          output-file: grype-results.json
+
+      - name: Upload Grype JSON as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype-json
+          path: grype-results.json
+          retention-days: 90
+
+  # ---------------------------------------------------------------------------
+  # ClamAV — Malware / virus signature scan
+  # ---------------------------------------------------------------------------
+  clamav-scan:
+    name: Malware scan (ClamAV)
+    runs-on: ubuntu-latest
+    needs: [metadata, static-validation]
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install podman
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Pull image and export filesystem
+        env:
+          IMAGE: ${{ needs.metadata.outputs.image }}
+        run: |
+          set -euo pipefail
+          echo "Pulling ${IMAGE}..."
+          podman pull "${IMAGE}"
+
+          echo "Creating container for export..."
+          CTAINER_ID=$(podman create "${IMAGE}" /bin/true)
+
+          echo "Exporting filesystem to tarball..."
+          podman export "${CTAINER_ID}" -o /tmp/vibes-rootfs.tar
+
+          podman rm "${CTAINER_ID}"
+
+          echo "Extracting filesystem for scanning..."
+          mkdir -p /tmp/vibes-rootfs
+          tar -xf /tmp/vibes-rootfs.tar -C /tmp/vibes-rootfs
+          rm -f /tmp/vibes-rootfs.tar
+
+          echo "Filesystem ready: $(du -sh /tmp/vibes-rootfs | cut -f1)"
+
+      - name: Run ClamAV scan
+        run: |
+          set -euo pipefail
+          echo "Running ClamAV malware scan on image filesystem..."
+          # Use the official ClamAV container to scan the extracted rootfs
+          # --no-summary suppresses per-file output; we capture the summary
+          podman run --rm \
+            -v /tmp/vibes-rootfs:/scanned:ro \
+            docker.io/clamav/clamav:stable \
+            clamscan --recursive --infected --no-summary \
+            --exclude-dir='^/scanned/proc' \
+            --exclude-dir='^/scanned/sys' \
+            --exclude-dir='^/scanned/dev' \
+            --exclude-dir='^/scanned/run' \
+            --exclude-dir='^/scanned/tmp' \
+            --exclude-dir='^/scanned/var/cache' \
+            --exclude-dir='^/scanned/usr/share/doc' \
+            /scanned 2>&1 | tee /tmp/clamav-results.txt
+
+          # ClamAV returns exit code 0 if no virus found, 1 if virus found
+          INFECTED=$(grep -c "FOUND$" /tmp/clamav-results.txt || true)
+          echo ""
+          echo "=== ClamAV Scan Summary ==="
+          echo "Files scanned: $(grep -c "" /tmp/clamav-results.txt || echo 0)"
+          echo "Infected files: ${INFECTED}"
+
+          if [[ "${INFECTED}" -gt 0 ]]; then
+            echo ""
+            echo "WARNING: ClamAV detected potential threats:"
+            grep "FOUND$" /tmp/clamav-results.txt || true
+            echo ""
+            echo "Note: AppImage files and compressed archives may trigger false positives."
+          fi
+
+          # Save full results as artifact
+          cp /tmp/clamav-results.txt "${GITHUB_WORKSPACE}/clamav-results.txt" || true
+
+      - name: Upload ClamAV results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clamav-results
+          path: clamav-results.txt
+          retention-days: 90
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # KVM boot validation
+  # ---------------------------------------------------------------------------
   kvm-boot-validation:
     name: KVM qcow2 boot + in-VM QA
     runs-on: ubuntu-latest
