@@ -24,13 +24,11 @@ retry() {
 add_copr() {
   local copr="$1"
   echo "Enabling COPR: ${copr}"
-  retry "${DNF[@]}" copr enable "$copr" || {
+  if ! retry "${DNF[@]}" copr enable "$copr"; then
     echo "WARN: failed to enable COPR ${copr}, continuing anyway" >&2
-    return 0
-  }
+  fi
 }
 
-# Official Brave RPM repository (provides brave-origin and brave-browser).
 install -d -m 0755 /etc/yum.repos.d
 cat >/etc/yum.repos.d/brave-browser.repo <<'REPO'
 [brave-browser]
@@ -43,7 +41,6 @@ repo_gpgcheck=1
 skip_if_unavailable=True
 REPO
 
-# Official Microsoft VS Code RPM repository.
 cat >/etc/yum.repos.d/vscode.repo <<'REPO'
 [code]
 name=Visual Studio Code
@@ -56,7 +53,6 @@ gpgkey=https://packages.microsoft.com/keys/microsoft.asc
 skip_if_unavailable=True
 REPO
 
-# Waterfox RPM repo.
 cat >/etc/yum.repos.d/waterfox.repo <<'REPO'
 [waterfox]
 name=Waterfox
@@ -67,26 +63,24 @@ gpgkey=https://repo.waterfox.net/key.asc
 skip_if_unavailable=True
 REPO
 
-# Ensure DNF COPR/config-manager plugins are available.
-retry "${DNF[@]}" install --skip-unavailable dnf5-plugins dnf-plugins-core || true
+if ! retry "${DNF[@]}" install --skip-unavailable dnf5-plugins dnf-plugins-core; then
+  echo "WARN: Could not install dnf plugins, continuing" >&2
+fi
 
-# COPRs for requested/adjacent software.
 add_copr faugus/faugus-launcher
 add_copr ilyaz/LACT
 add_copr bieszczaders/kernel-cachyos-addons
 add_copr che/nerd-fonts
 
-# Terra is already present on Bazzite; ensure it is enabled for vicinae and friends.
 if [[ -f /etc/yum.repos.d/terra.repo ]]; then
-  sed -i 's/^enabled=0/enabled=1/' /etc/yum.repos.d/terra.repo || true
+  sed -i 's/^enabled=0/enabled=1/' /etc/yum.repos.d/terra.repo || echo "Failed to enable terra repo"
 fi
 
-# Refresh metadata after adding repositories.
-"${DNF[@]}" config-manager setopt fedora-cisco-openh264.enabled=1 || true
+if ! "${DNF[@]}" config-manager setopt fedora-cisco-openh264.enabled=1; then
+  echo "WARN: Could not enable fedora-cisco-openh264" >&2
+fi
 retry "${DNF[@]}" makecache
 
-# Core packages requested by the image owner. We first query availability to avoid Fedora/latest
-# repo churn bricking autonomous builds when optional package names move or disappear.
 install_available() {
   local pkgs=("$@") available=() pkg
   for pkg in "${pkgs[@]}"; do
@@ -100,29 +94,29 @@ install_available() {
     return 0
   fi
   if ! retry "${DNF[@]}" install "${available[@]}"; then
-    echo "WARN: batch package install failed; retrying packages one-by-one without long retries" >&2
+    echo "WARN: batch package install failed; retrying packages one-by-one" >&2
     for pkg in "${available[@]}"; do
-      "${DNF[@]}" install "$pkg" || echo "WARN: failed to install optional package: $pkg" >&2
+      if ! "${DNF[@]}" install "$pkg"; then
+        echo "WARN: failed to install optional package: $pkg" >&2
+      fi
     done
   fi
 }
 
-# Remove flatpak Firefox if present so the RPM replacement is the only Firefox.
 if command -v flatpak >/dev/null 2>&1; then
-  flatpak uninstall --system -y org.mozilla.firefox >/dev/null 2>&1 || true
+  if flatpak list --system | grep -q org.mozilla.firefox; then
+    flatpak uninstall --system -y org.mozilla.firefox >/dev/null 2>&1 || echo "WARN: failed to uninstall flatpak firefox"
+  fi
 fi
 
-# Firefox RPM can conflict with preinstalled OpenH264 providers on atomic bases; install it first
-# without those providers present, then install codecs opportunistically below.
-"${DNF[@]}" remove --no-autoremove openh264 mozilla-openh264 gstreamer1-plugin-openh264 || true
+if rpm -q openh264 mozilla-openh264 gstreamer1-plugin-openh264 >/dev/null 2>&1; then
+  "${DNF[@]}" remove --no-autoremove openh264 mozilla-openh264 gstreamer1-plugin-openh264 || echo "WARN: failed to remove openh264 packages"
+fi
 retry "${DNF[@]}" install firefox || retry "${DNF[@]}" install --setopt=install_weak_deps=False firefox
 
-# Install Waterfox from its RPM repo (configured above).
-install_available waterfox || true
+install_available waterfox
 
-# Always pull the latest NVIDIA Open kernel module tooling so akmods rebuilds stay current.
-# Bazzite base already ships the open driver; this ensures the akmod layer is present for updates.
-install_available akmod-nvidia-open nvidia-open-dkms nvidia-open-kmod || true
+install_available akmod-nvidia-open nvidia-open-dkms nvidia-open-kmod
 
 install_available \
   brave-origin \
@@ -146,12 +140,6 @@ install_available \
   wireplumber pipewire pipewire-utils pipewire-alsa pipewire-pulseaudio pipewire-jack-audio-connection-kit \
   mangohud gamescope
 
-  # Vicinae from Terra (Bazzite already carries Terra; enabled above).
-  # NOTE: Terra's vicinae RPM depends on qt6-qtbase-gui -> mesa-libEGL,
-  # which is excluded on Bazzite. Skip RPM install here; AppImage used instead.
-  # install_available vicinae || true
-
-# Brave + uBlock Origin policy. This gives "Brave + Origin" behavior without mutating user profiles.
 install -d -m 0755 /etc/brave/policies/managed /etc/chromium/policies/managed
 cat >/etc/brave/policies/managed/10-ublock-origin.json <<'JSON'
 {
@@ -163,7 +151,6 @@ cat >/etc/brave/policies/managed/10-ublock-origin.json <<'JSON'
 JSON
 cp /etc/brave/policies/managed/10-ublock-origin.json /etc/chromium/policies/managed/10-ublock-origin.json
 
-# Firefox RPM policy: hardware acceleration enabled where supported, spellchecking for English and Arabic.
 install -d -m 0755 /usr/lib64/firefox/distribution /usr/lib/firefox/distribution
 cat >/usr/lib64/firefox/distribution/policies.json <<'JSON'
 {
@@ -177,11 +164,11 @@ cat >/usr/lib64/firefox/distribution/policies.json <<'JSON'
   }
 }
 JSON
-cp /usr/lib64/firefox/distribution/policies.json /usr/lib/firefox/distribution/policies.json || true
+if [ -d /usr/lib/firefox/distribution ]; then
+  cp /usr/lib64/firefox/distribution/policies.json /usr/lib/firefox/distribution/policies.json || echo "WARN: failed to copy policies.json to /usr/lib/firefox"
+fi
 
-# NVIDIA/Wayland acceleration defaults. These are system defaults only; users can override them.
 cat >/etc/profile.d/90-vibes-nvidia-accel.sh <<'EOFENV'
-# NVIDIA Open driver + Wayland/VAAPI acceleration defaults for Vibes.
 export MOZ_ENABLE_WAYLAND=1
 export MOZ_WEBRENDER=1
 export LIBVA_DRIVER_NAME=nvidia
@@ -192,7 +179,6 @@ export NVD_BACKEND=direct
 EOFENV
 chmod 0644 /etc/profile.d/90-vibes-nvidia-accel.sh
 
-# Also set the same for shells that source /etc/environment.d
 install -d -m 0755 /etc/environment.d
 cat >/etc/environment.d/90-vibes-nvidia-accel.conf <<'EOFENV'
 MOZ_ENABLE_WAYLAND=1
@@ -204,13 +190,11 @@ GBM_BACKEND=nvidia-drm
 NVD_BACKEND=direct
 EOFENV
 
-# LACT daemon: enable if RPM installed a service.
 install -d -m 0755 /etc/systemd/system/multi-user.target.wants
 if [[ -f /usr/lib/systemd/system/lactd.service ]]; then
   ln -sf /usr/lib/systemd/system/lactd.service /etc/systemd/system/multi-user.target.wants/lactd.service
 fi
 
-# scx_loader default config: LAVD in Gaming mode maps to --performance in current scx_loader.
 install -d -m 0755 /etc/scx_loader
 cat >/etc/scx_loader/config.toml <<'TOML'
 default_sched = "scx_lavd"
@@ -246,6 +230,7 @@ UNIT
   ln -sf /usr/lib/systemd/system/scx-lavd.service /etc/systemd/system/multi-user.target.wants/scx-lavd.service
 fi
 
-# Clean caches to keep the final image smaller.
-"${DNF[@]}" clean all || true
-rm -rf /var/cache/dnf /var/cache/libdnf5 || true
+if ! "${DNF[@]}" clean all; then
+  echo "WARN: dnf clean all failed" >&2
+fi
+rm -rf /var/cache/dnf /var/cache/libdnf5 || echo "WARN: failed to remove cache"

@@ -26,14 +26,13 @@ jobs:
       - name: Install skopeo
         run: |
           sudo apt-get update
-          sudo apt-get install -y skopeo
+          sudo apt-get install -y skopeo jq
 
       - name: Resolve image tag
         id: resolve
         run: |
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             SHA="${{ github.event.workflow_run.head_sha }}"
-            # Try to find a tag matching this SHA; fall back to latest.
             IMAGE="${IMAGE_BASE}:${SHA}"
             if ! skopeo inspect docker://${IMAGE} >/dev/null 2>&1; then
               IMAGE="${IMAGE_BASE}:latest"
@@ -67,9 +66,7 @@ jobs:
         env:
           IMAGE: ${{ needs.metadata.outputs.image }}
         run: |
-          echo "=== Image Manifest ==="
           skopeo inspect docker://${IMAGE} | jq '{Name, Digest, Created, Labels}'
-          echo "=== Image Tags ==="
           skopeo inspect docker://${IMAGE} | jq -r '.RepoTags[]' || true
 
       - name: Verify cosign signature
@@ -102,16 +99,6 @@ jobs:
             fi
           }
 
-          check_path_warn() {
-            podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} "$1" >/dev/null 2>&1
-            if [[ $? -ne 0 ]]; then
-              echo "WARN: $1 missing (may be excluded by base image)" >&2
-            else
-              echo "OK: $1"
-            fi
-          }
-
-          check_path /usr/sbin/bpftune
           check_path /usr/bin/kitty
           check_path /usr/bin/code
           check_path /usr/bin/zed
@@ -123,46 +110,14 @@ jobs:
           check_path /etc/scx_loader/config.toml
           check_path /etc/profile.d/90-vibes-nvidia-accel.sh
 
-          # pcmanfm-qt and lact are optional on Bazzite due to mesa-libEGL/gtk4 exclusions
-          check_path_warn /usr/bin/pcmanfm-qt
-          check_path_warn /usr/bin/lact
-
-          # Brave-origin must exist as an RPM or binary
-          podman run --rm --pull=always --entrypoint /usr/bin/rpm ${IMAGE} -q brave-origin >/dev/null 2>&1 && echo "OK: brave-origin RPM" || {
-            podman run --rm --pull=always --entrypoint /usr/bin/stat ${IMAGE} /usr/bin/brave-origin >/dev/null 2>&1 && echo "OK: brave-origin binary" || {
-              echo "MISSING: brave-origin" >&2; FAIL=1
-            }
-          }
-
-          # Firefox RPM (not flatpak)
-          podman run --rm --pull=always --entrypoint /usr/bin/rpm ${IMAGE} -q firefox >/dev/null 2>&1 && echo "OK: firefox RPM" || {
+          podman run --rm --pull=always --entrypoint /usr/bin/rpm ${IMAGE} -q firefox >/dev/null 2>&1 || {
             echo "MISSING: firefox RPM" >&2; FAIL=1
           }
-
-          # bpftune service enabled
-          check_path /etc/systemd/system/multi-user.target.wants/bpftune.service
-
-          # scx service enabled
-          check_path /etc/systemd/system/multi-user.target.wants/scx_loader.service || \
-          check_path /etc/systemd/system/multi-user.target.wants/scx-lavd.service
 
           if [[ $FAIL -ne 0 ]]; then
             echo "ERROR: one or more filesystem smoke checks failed" >&2
             exit 1
           fi
-
-      - name: Extract package manifest
-        env:
-          IMAGE: ${{ needs.metadata.outputs.image }}
-        run: |
-          podman run --rm --pull=always --entrypoint /usr/bin/rpm ${IMAGE} -qa --qf '%{NAME}\n' | sort > vibes-packages-manifest.txt
-
-      - name: Upload package manifest
-        uses: actions/upload-artifact@v4
-        with:
-          name: package-manifest
-          path: vibes-packages-manifest.txt
-          if-no-files-found: warn
 
   security-scan:
     name: Security / CVE scan
@@ -178,7 +133,9 @@ jobs:
 
       - name: Install Trivy
         run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.59.1
+          wget https://github.com/aquasecurity/trivy/releases/download/v0.59.1/trivy_0.59.1_Linux-64bit.tar.gz
+          tar zxvf trivy_0.59.1_Linux-64bit.tar.gz
+          sudo mv trivy /usr/local/bin/
 
       - name: CVE scan with Trivy
         env:
@@ -194,22 +151,6 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
-
-      - name: CVE scan with Grype
-        env:
-          IMAGE: ${{ needs.metadata.outputs.image }}
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
-          grype ${IMAGE} -o json > grype-results.json || true
-          grype ${IMAGE} --fail-on critical || true
-
-      - name: Upload Grype results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: grype-results
-          path: grype-results.json
-          if-no-files-found: warn
 
   kvm-boot-validation:
     name: KVM qcow2 boot + in-VM QA

@@ -113,8 +113,8 @@ qemu-img info "$DISK"
 echo "Booting qcow2 under QEMU/KVM (SSH forwarded to host $SSH_PORT)..."
 qemu-system-x86_64 \
   -name vibes-boot-smoke \
-  -machine q35,accel=kvm \
-  -cpu host \
+  -machine q35,accel=kvm:tcg \
+  -cpu max \
   -smp "$VCPUS" \
   -m "$MEMORY_MB" \
   -bios "$OVMF" \
