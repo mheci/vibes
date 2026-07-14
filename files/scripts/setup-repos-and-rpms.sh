@@ -126,6 +126,7 @@ package_available_or_installed() {
 
 install_required_packages() {
   local pkg missing=0
+
   for pkg in "$@"; do
     if ! package_available_or_installed "$pkg"; then
       warn "required package unavailable in enabled repos: $pkg"
@@ -134,7 +135,15 @@ install_required_packages() {
   done
 
   (( missing == 0 )) || die "one or more required packages are unavailable"
-  retry "${DNF[@]}" install "$@"
+
+  for pkg in "$@"; do
+    if rpm -q "$pkg" >/dev/null 2>&1; then
+      log "Required package already installed: $pkg"
+      continue
+    fi
+
+    retry "${DNF[@]}" install "$pkg"
+  done
 }
 
 install_optional_packages() {
