@@ -1,42 +1,75 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Installing Themes..."
+echo "=== Installing Desktop Themes ==="
 
-mkdir -p /usr/share/themes /usr/share/icons /usr/share/fonts /usr/share/color-schemes /usr/share/plasma/desktoptheme /usr/share/plasma/look-and-feel
+# Create required directory structure
+mkdir -p \
+  /usr/share/themes \
+  /usr/share/icons \
+  /usr/share/color-schemes \
+  /usr/share/plasma/desktoptheme \
+  /usr/share/plasma/look-and-feel
 
-# Install Darkly
-if git clone --depth 1 https://github.com/Bali10050/Darkly /tmp/darkly; then
-    cp -r /tmp/darkly/color-schemes/* /usr/share/color-schemes/ 2>/dev/null || echo "WARN: failed to copy Darkly color schemes"
-    cp -r /tmp/darkly/plasma/desktoptheme/* /usr/share/plasma/desktoptheme/ 2>/dev/null || echo "WARN: failed to copy Darkly desktop theme"
-    cp -r /tmp/darkly/plasma/look-and-feel/* /usr/share/plasma/look-and-feel/ 2>/dev/null || echo "WARN: failed to copy Darkly look and feel"
-    rm -rf /tmp/darkly
-else
-    echo "WARN: Failed to clone Darkly theme"
+retry() {
+  local attempts=3 delay=5 n=1
+  until "$@"; do
+    if (( n >= attempts )); then
+      echo "ERROR: command failed after ${attempts} attempts: $*" >&2
+      return 1
+    fi
+    echo "WARN: retrying in ${delay}s: $*" >&2
+    sleep "$delay"
+    n=$((n + 1))
+    delay=$((delay * 2))
+  done
+}
+
+# --- Darkly (Plasma window decoration + color scheme) ---
+echo "Installing Darkly theme..."
+retry git clone --depth 1 https://github.com/Bali10050/Darkly /tmp/darkly
+
+if [[ -d /tmp/darkly/color-schemes ]]; then
+  cp -a /tmp/darkly/color-schemes/. /usr/share/color-schemes/
 fi
-
-# Install Beauty-Plasma-Themes
-if git clone --depth 1 https://github.com/L4ki/Beauty-Plasma-Themes /tmp/beauty; then
-    mkdir -p /usr/share/plasma/desktoptheme/Beauty-Plasma-Themes
-    cp -r /tmp/beauty/* /usr/share/plasma/desktoptheme/Beauty-Plasma-Themes/ 2>/dev/null || echo "WARN: failed to copy Beauty-Plasma-Themes"
-    rm -rf /tmp/beauty
-else
-    echo "WARN: Failed to clone Beauty-Plasma-Themes"
+if [[ -d /tmp/darkly/plasma/desktoptheme ]]; then
+  cp -a /tmp/darkly/plasma/desktoptheme/. /usr/share/plasma/desktoptheme/
 fi
-
-# Install macOS cursor themes from binary release
-if curl -L -f -o /tmp/macOS-BigSur.tar.gz https://github.com/ful1e5/apple_cursor/releases/download/v2.0.0/macOS-BigSur.tar.gz; then
-    tar -xzf /tmp/macOS-BigSur.tar.gz -C /usr/share/icons/ || echo "WARN: failed to extract BigSur cursor"
-    rm -f /tmp/macOS-BigSur.tar.gz
-else
-    echo "WARN: Failed to download BigSur cursor theme"
+if [[ -d /tmp/darkly/plasma/look-and-feel ]]; then
+  cp -a /tmp/darkly/plasma/look-and-feel/. /usr/share/plasma/look-and-feel/
 fi
+rm -rf /tmp/darkly
+echo "Darkly theme installed."
 
-if curl -L -f -o /tmp/macOS-Monterey.tar.gz https://github.com/ful1e5/apple_cursor/releases/download/v2.0.0/macOS-Monterey.tar.gz; then
-    tar -xzf /tmp/macOS-Monterey.tar.gz -C /usr/share/icons/ || echo "WARN: failed to extract Monterey cursor"
-    rm -f /tmp/macOS-Monterey.tar.gz
-else
-    echo "WARN: Failed to download Monterey cursor theme"
+# --- Beauty-Plasma-Themes ---
+echo "Installing Beauty-Plasma-Themes..."
+retry git clone --depth 1 https://github.com/L4ki/Beauty-Plasma-Themes /tmp/beauty
+
+# Copy theme directories individually to preserve structure
+for dir in /tmp/beauty/*/; do
+  dirname="$(basename "$dir")"
+  if [[ -d "$dir/plasma" ]]; then
+    # This is a theme directory with plasma subfolder
+    cp -a "$dir" "/usr/share/plasma/desktoptheme/${dirname}" 2>/dev/null || true
+  fi
+done
+
+# Also copy any top-level plasma/desktoptheme entries
+if [[ -d /tmp/beauty/plasma/desktoptheme ]]; then
+  cp -a /tmp/beauty/plasma/desktoptheme/. /usr/share/plasma/desktoptheme/ 2>/dev/null || true
 fi
+rm -rf /tmp/beauty
+echo "Beauty-Plasma-Themes installed."
 
-echo "Themes installed successfully"
+# --- macOS cursor themes ---
+echo "Installing macOS cursor themes..."
+CURSOR_BASE="https://github.com/ful1e5/apple_cursor/releases/download/v2.0.0"
+
+for theme in macOS-BigSur macOS-Monterey; do
+  echo "  Downloading ${theme}..."
+  retry curl -fL -o "/tmp/${theme}.tar.gz" "${CURSOR_BASE}/${theme}.tar.gz"
+  tar -xzf "/tmp/${theme}.tar.gz" -C /usr/share/icons/
+  rm -f "/tmp/${theme}.tar.gz"
+done
+
+echo "=== Desktop themes installed successfully ==="

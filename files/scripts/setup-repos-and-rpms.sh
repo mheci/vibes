@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "=== Setting up repositories and RPM packages ==="
+
 if command -v dnf5 >/dev/null 2>&1; then
   DNF=(dnf5 -y)
 else
@@ -24,12 +26,16 @@ retry() {
 add_copr() {
   local copr="$1"
   echo "Enabling COPR: ${copr}"
-  if ! retry "${DNF[@]}" copr enable "$copr"; then
-    echo "WARN: failed to enable COPR ${copr}, continuing anyway" >&2
-  fi
+  retry "${DNF[@]}" copr enable "$copr"
 }
 
+# =============================================================================
+# Third-party repositories
+# =============================================================================
+echo "--- Configuring third-party repositories ---"
+
 install -d -m 0755 /etc/yum.repos.d
+
 cat >/etc/yum.repos.d/brave-browser.repo <<'REPO'
 [brave-browser]
 name=Brave Browser
@@ -63,24 +69,34 @@ gpgkey=https://repo.waterfox.net/key.asc
 skip_if_unavailable=True
 REPO
 
-if ! retry "${DNF[@]}" install --skip-unavailable dnf5-plugins dnf-plugins-core; then
-  echo "WARN: Could not install dnf plugins, continuing" >&2
-fi
+# =============================================================================
+# COPR repositories
+# =============================================================================
+echo "--- Enabling COPR repositories ---"
+
+retry "${DNF[@]}" install --skip-unavailable dnf5-plugins dnf-plugins-core
 
 add_copr faugus/faugus-launcher
 add_copr ilyaz/LACT
 add_copr bieszczaders/kernel-cachyos-addons
 add_copr che/nerd-fonts
 
+# Enable terra repo if present (provided by base image)
 if [[ -f /etc/yum.repos.d/terra.repo ]]; then
-  sed -i 's/^enabled=0/enabled=1/' /etc/yum.repos.d/terra.repo || echo "Failed to enable terra repo"
+  sed -i 's/^enabled=0/enabled=1/' /etc/yum.repos.d/terra.repo
 fi
 
-if ! "${DNF[@]}" config-manager setopt fedora-cisco-openh264.enabled=1; then
-  echo "WARN: Could not enable fedora-cisco-openh264" >&2
-fi
+# Enable Cisco OpenH264 (required for WebRTC video)
+"${DNF[@]}" config-manager setopt fedora-cisco-openh264.enabled=1
+
 retry "${DNF[@]}" makecache
 
+# =============================================================================
+# Package installation helper
+# =============================================================================
+
+# Install packages that are available in enabled repos.
+# Packages not found in any repo are skipped with a warning.
 install_available() {
   local pkgs=("$@") available=() pkg
   for pkg in "${pkgs[@]}"; do
@@ -94,52 +110,116 @@ install_available() {
     return 0
   fi
   if ! retry "${DNF[@]}" install "${available[@]}"; then
-    echo "WARN: batch package install failed; retrying packages one-by-one" >&2
+    echo "WARN: batch install failed; retrying packages one-by-one" >&2
     for pkg in "${available[@]}"; do
-      if ! "${DNF[@]}" install "$pkg"; then
+      if ! "${DNF[@]}" install --skip-unavailable "$pkg"; then
         echo "WARN: failed to install optional package: $pkg" >&2
       fi
     done
   fi
 }
 
+# =============================================================================
+# Firefox (RPM, not Flatpak)
+# =============================================================================
+echo "--- Installing Firefox RPM ---"
+
+# Remove Flatpak Firefox if present (prefer native RPM for codec support)
 if command -v flatpak >/dev/null 2>&1; then
   if flatpak list --system | grep -q org.mozilla.firefox; then
-    flatpak uninstall --system -y org.mozilla.firefox >/dev/null 2>&1 || echo "WARN: failed to uninstall flatpak firefox"
+    flatpak uninstall --system -y org.mozilla.firefox
   fi
 fi
 
+# Remove conflicting openh264 packages before installing Firefox RPM
 if rpm -q openh264 mozilla-openh264 gstreamer1-plugin-openh264 >/dev/null 2>&1; then
-  "${DNF[@]}" remove --no-autoremove openh264 mozilla-openh264 gstreamer1-plugin-openh264 || echo "WARN: failed to remove openh264 packages"
+  "${DNF[@]}" remove --no-autoremove openh264 mozilla-openh264 gstreamer1-plugin-openh264
 fi
+
 retry "${DNF[@]}" install firefox || retry "${DNF[@]}" install --setopt=install_weak_deps=False firefox
 
 install_available waterfox
 
+# =============================================================================
+# NVIDIA drivers and GPU acceleration
+# =============================================================================
+echo "--- Installing NVIDIA packages ---"
+
 install_available akmod-nvidia-open nvidia-open-dkms nvidia-open-kmod
+
+install_available \
+  libva-nvidia-driver nvidia-vaapi-driver nvidia-container-toolkit \
+  vulkan-tools egl-utils glx-utils clinfo libva-utils mesa-vulkan-drivers
+
+# =============================================================================
+# Desktop applications
+# =============================================================================
+echo "--- Installing desktop applications ---"
 
 install_available \
   brave-origin \
   faugus-launcher kitty umu-launcher pcmanfm-qt \
   code lact scx-scheds scx-tools-git gamemode \
-  libva-nvidia-driver nvidia-vaapi-driver nvidia-container-toolkit \
-  vulkan-tools egl-utils glx-utils clinfo libva-utils mesa-vulkan-drivers \
-  git make gcc clang llvm bpftool libbpf libbpf-devel libcap libcap-devel libnl3 libnl3-devel python3-docutils elfutils-libelf-devel pkgconf-pkg-config zlib-devel cmake ninja-build \
+  mangohud gamescope
+
+# =============================================================================
+# Multimedia codecs and GStreamer plugins
+# =============================================================================
+echo "--- Installing multimedia codecs ---"
+
+install_available \
   ffmpeg ffmpeg-libs libavcodec-freeworld mozilla-openh264 \
   gstreamer1-plugin-openh264 gstreamer1-plugins-base gstreamer1-plugins-good \
   gstreamer1-plugins-bad-free gstreamer1-plugins-bad-freeworld \
   gstreamer1-plugins-ugly gstreamer1-libav gstreamer1-vaapi \
   lame x264 x265 svt-av1-libs rav1e-libs aom dav1d \
-  ffmpegthumbnailer kdegraphics-thumbnailers kio-extras \
+  ffmpegthumbnailer \
   heif-pixbuf-loader libheif-freeworld webp-pixbuf-loader libjxl libjxl-utils \
   raw-thumbnailer poppler-utils libgsf tumbler \
-  hunspell hunspell-en-US hunspell-ar hyphen-en hyphen-ar aspell aspell-en aspell-ar \
-  words autocorr-en autocorr-ar \
-  nerd-fonts jetbrains-mono-fonts fira-code-fonts cascadia-code-fonts \
-  google-noto-sans-arabic-fonts google-noto-naskh-arabic-fonts google-noto-kufi-arabic-fonts \
-  wireplumber pipewire pipewire-utils pipewire-alsa pipewire-pulseaudio pipewire-jack-audio-connection-kit \
-  mangohud gamescope
+  kdegraphics-thumbnailers kio-extras
 
+# =============================================================================
+# Fonts
+# =============================================================================
+echo "--- Installing fonts ---"
+
+install_available \
+  nerd-fonts jetbrains-mono-fonts fira-code-fonts cascadia-code-fonts \
+  google-noto-sans-arabic-fonts google-noto-naskh-arabic-fonts google-noto-kufi-arabic-fonts
+
+# =============================================================================
+# Spellcheck dictionaries and language data
+# =============================================================================
+echo "--- Installing language data ---"
+
+install_available \
+  hunspell hunspell-en-US hunspell-ar hyphen-en hyphen-ar aspell aspell-en aspell-ar \
+  words autocorr-en autocorr-ar
+
+# =============================================================================
+# Audio stack (PipeWire, WirePlumber)
+# =============================================================================
+echo "--- Installing audio packages ---"
+
+install_available \
+  wireplumber pipewire pipewire-utils pipewire-alsa pipewire-pulseaudio pipewire-jack-audio-connection-kit
+
+# =============================================================================
+# Build tools (needed for bpftune and other source builds)
+# =============================================================================
+echo "--- Installing build tools ---"
+
+install_available \
+  git make gcc clang llvm bpftool \
+  libbpf libbpf-devel libcap libcap-devel libnl3 libnl3-devel \
+  python3-docutils elfutils-libelf-devel pkgconf-pkg-config zlib-devel cmake ninja-build
+
+# =============================================================================
+# Browser policies and configuration
+# =============================================================================
+echo "--- Configuring browser policies ---"
+
+# Brave/Chromium: force-install uBlock Origin
 install -d -m 0755 /etc/brave/policies/managed /etc/chromium/policies/managed
 cat >/etc/brave/policies/managed/10-ublock-origin.json <<'JSON'
 {
@@ -151,6 +231,7 @@ cat >/etc/brave/policies/managed/10-ublock-origin.json <<'JSON'
 JSON
 cp /etc/brave/policies/managed/10-ublock-origin.json /etc/chromium/policies/managed/10-ublock-origin.json
 
+# Firefox: enable VA-API and WebRender
 install -d -m 0755 /usr/lib64/firefox/distribution /usr/lib/firefox/distribution
 cat >/usr/lib64/firefox/distribution/policies.json <<'JSON'
 {
@@ -164,9 +245,14 @@ cat >/usr/lib64/firefox/distribution/policies.json <<'JSON'
   }
 }
 JSON
-if [ -d /usr/lib/firefox/distribution ]; then
-  cp /usr/lib64/firefox/distribution/policies.json /usr/lib/firefox/distribution/policies.json || echo "WARN: failed to copy policies.json to /usr/lib/firefox"
+if [[ -d /usr/lib/firefox/distribution ]]; then
+  cp /usr/lib64/firefox/distribution/policies.json /usr/lib/firefox/distribution/policies.json
 fi
+
+# =============================================================================
+# NVIDIA acceleration environment variables
+# =============================================================================
+echo "--- Configuring NVIDIA acceleration environment ---"
 
 cat >/etc/profile.d/90-vibes-nvidia-accel.sh <<'EOFENV'
 export MOZ_ENABLE_WAYLAND=1
@@ -190,11 +276,19 @@ GBM_BACKEND=nvidia-drm
 NVD_BACKEND=direct
 EOFENV
 
+# =============================================================================
+# System services
+# =============================================================================
+echo "--- Configuring system services ---"
+
 install -d -m 0755 /etc/systemd/system/multi-user.target.wants
+
+# LACT daemon (GPU overclocking/monitoring)
 if [[ -f /usr/lib/systemd/system/lactd.service ]]; then
   ln -sf /usr/lib/systemd/system/lactd.service /etc/systemd/system/multi-user.target.wants/lactd.service
 fi
 
+# scx_loader (sched_ext scheduler manager)
 install -d -m 0755 /etc/scx_loader
 cat >/etc/scx_loader/config.toml <<'TOML'
 default_sched = "scx_lavd"
@@ -230,7 +324,11 @@ UNIT
   ln -sf /usr/lib/systemd/system/scx-lavd.service /etc/systemd/system/multi-user.target.wants/scx-lavd.service
 fi
 
-if ! "${DNF[@]}" clean all; then
-  echo "WARN: dnf clean all failed" >&2
-fi
-rm -rf /var/cache/dnf /var/cache/libdnf5 || echo "WARN: failed to remove cache"
+# =============================================================================
+# Cleanup
+# =============================================================================
+echo "--- Cleaning up ---"
+"${DNF[@]}" clean all
+rm -rf /var/cache/dnf /var/cache/libdnf5
+
+echo "=== Repositories and RPM packages configured successfully ==="

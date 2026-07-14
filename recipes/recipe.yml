@@ -5,17 +5,26 @@ version: 1
 name: vibes
 description: Bazzite NVIDIA Open gaming, media, and AI workstation image built with BlueBuild.
 
-# Track the latest Bazzite NVIDIA-open image as requested.
 base-image: ghcr.io/ublue-os/bazzite-nvidia-open
 image-version: latest
 
 modules:
+  # Configure repositories and install RPM packages
   - type: script
     scripts:
       - setup-repos-and-rpms.sh
+
+  # Install latest versions of applications from upstream
+  - type: script
+    scripts:
       - install-latest-apps.sh
+
+  # Install desktop themes and cursor packs
+  - type: script
+    scripts:
       - install-themes.sh
 
+  # Configure default Flatpaks (installed at first boot)
   - type: default-flatpaks
     configurations:
       - notify: true
@@ -25,14 +34,13 @@ modules:
           - org.gnome.Loupe
       - scope: user
 
+  # Copy custom configuration files into the image
   - type: files
     files:
       - source: system
         destination: /
 
-  # Keep signed-image policy support after all customizations.
-
-  # bootc-recommended sanity checks at image build time.
+  # Run bootc container lint to validate image integrity
   - type: containerfile
     snippets:
       - RUN bootc container lint

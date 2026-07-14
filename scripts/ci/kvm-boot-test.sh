@@ -2,12 +2,8 @@
 set -euo pipefail
 
 # KVM smoke boot for bootc images with SSH-based automated QA.
-# Rationale:
-# - bootc-image-builder is the supported path for turning a bootc container into
-#   a QEMU-bootable qcow2 disk.
-# - QEMU serial output is machine-readable and lets CI detect early boot failures.
-# - SSH into the guest enables deep automated QA (systemd health, package checks,
-#   GPU accel verification, journal scanning) without relying solely on serial greps.
+# Converts a bootc container image to a qcow2 disk using bootc-image-builder,
+# boots it under QEMU/KVM, and runs automated validation via SSH.
 
 IMAGE="${IMAGE:?IMAGE must be set, e.g. ghcr.io/owner/image:latest}"
 WORKDIR="${WORKDIR:-$PWD/kvm-boot-work}"
@@ -39,7 +35,7 @@ cleanup_qemu() {
     pid="$(cat "$PIDFILE" 2>/dev/null || true)"
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
       echo "Cleaning up QEMU (PID $pid)..."
-      kill "$pid" || true
+      kill "$pid" 2>/dev/null || true
       sleep 2
       kill -9 "$pid" 2>/dev/null || true
     fi
@@ -52,10 +48,10 @@ if [[ ! -e /dev/kvm ]]; then
   fail "/dev/kvm is not available. KVM boot validation requires a runner with nested virtualization."
 fi
 
-# Best-effort make KVM accessible on GitHub-hosted runners.
-sudo chmod 666 /dev/kvm || true
+# Make KVM accessible on GitHub-hosted runners.
+sudo chmod 666 /dev/kvm
 
-# Prefer 4M OVMF when available, fall back to distro default.
+# Find OVMF firmware (prefer 4M variant).
 OVMF=""
 for candidate in \
   /usr/share/OVMF/OVMF_CODE_4M.fd \
@@ -68,7 +64,7 @@ for candidate in \
 done
 [[ -n "$OVMF" ]] || fail "No readable OVMF firmware found; install ovmf."
 
-# Generate an SSH key pair for this test run.
+# Generate SSH key pair for this test run.
 SSH_KEY="$WORKDIR/vm_ci_key"
 rm -f "$SSH_KEY" "$SSH_KEY.pub"
 ssh-keygen -t ed25519 -N "" -f "$SSH_KEY" -C "ci@vibes.local" >/dev/null 2>&1
@@ -90,7 +86,6 @@ sudo podman pull "$IMAGE"
 
 # Build qcow2. Mount root's container storage because sudo podman pulled there.
 echo "Building qcow2 with bootc-image-builder..."
-set -o pipefail
 sudo podman run \
   --rm \
   --privileged \
@@ -109,7 +104,7 @@ DISK="$(find "$WORKDIR/output" -type f \( -name '*.qcow2' -o -name 'disk.qcow2' 
 [[ -n "$DISK" && -s "$DISK" ]] || fail "bootc-image-builder did not produce a qcow2 disk."
 qemu-img info "$DISK"
 
-# Boot read-only/snapshot so validation never mutates the produced artifact.
+# Boot with snapshot so validation never mutates the produced artifact.
 echo "Booting qcow2 under QEMU/KVM (SSH forwarded to host $SSH_PORT)..."
 qemu-system-x86_64 \
   -name vibes-boot-smoke \
@@ -133,6 +128,8 @@ panic_re='Kernel panic|not syncing|Oops:|BUG:|general protection fault|Unable to
 success_re='Reached target .*Multi-User|Reached target .*Graphical|Started .*Getty|login:'
 ssh_ready_re='Started .*SSH server|Started OpenSSH server'
 
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o BatchMode=yes -i $SSH_KEY"
+
 start_ts="$(date +%s)"
 last_size=0
 ssh_available=0
@@ -142,22 +139,12 @@ while true; do
   fi
 
   if grep -Eaiq "$success_re" "$SERIAL_LOG"; then
-    echo "KVM boot validation passed: guest reached a login/systemd target."
-  fi
-
-  if [[ "$ssh_available" -eq 0 ]] && grep -Eaiq "$ssh_ready_re" "$SERIAL_LOG"; then
-    echo "SSH server appears to have started in guest."
+    echo "KVM boot validation: guest reached login/systemd target."
   fi
 
   # Try SSH once we think the guest is up.
   if [[ "$ssh_available" -eq 0 ]]; then
-    if ssh -o StrictHostKeyChecking=no \
-           -o UserKnownHostsFile=/dev/null \
-           -o ConnectTimeout=5 \
-           -o BatchMode=yes \
-           -i "$SSH_KEY" \
-           -p "$SSH_PORT" \
-           ci@localhost "echo ssh-ready" >/dev/null 2>&1; then
+    if ssh $SSH_OPTS -p "$SSH_PORT" ci@localhost "echo ssh-ready" >/dev/null 2>&1; then
       echo "SSH connection to guest established."
       ssh_available=1
       break
@@ -189,41 +176,20 @@ fi
 QA_SCRIPT="${GITHUB_WORKSPACE:-$(dirname "$0")}/vm-qa.sh"
 if [[ -f "$QA_SCRIPT" ]]; then
   echo "Copying vm-qa.sh into guest and executing..."
-  scp -o StrictHostKeyChecking=no \
-      -o UserKnownHostsFile=/dev/null \
-      -o ConnectTimeout=10 \
-      -i "$SSH_KEY" \
-      -P "$SSH_PORT" \
-      "$QA_SCRIPT" ci@localhost:/tmp/vm-qa.sh
+  scp $SSH_OPTS -P "$SSH_PORT" "$QA_SCRIPT" ci@localhost:/tmp/vm-qa.sh
 
-  ssh -o StrictHostKeyChecking=no \
-      -o UserKnownHostsFile=/dev/null \
-      -o ConnectTimeout=10 \
-      -i "$SSH_KEY" \
-      -p "$SSH_PORT" \
-      ci@localhost "bash /tmp/vm-qa.sh" || {
+  ssh $SSH_OPTS -p "$SSH_PORT" ci@localhost "bash /tmp/vm-qa.sh" || {
     echo "ERROR: in-VM QA script returned non-zero." >&2
-    ERR=1
   }
 
   # Pull logs back from guest.
-  scp -o StrictHostKeyChecking=no \
-      -o UserKnownHostsFile=/dev/null \
-      -o ConnectTimeout=10 \
-      -i "$SSH_KEY" \
-      -P "$SSH_PORT" \
-      -r "ci@localhost:/tmp/vibes-qa" "$WORKDIR/" || true
+  scp $SSH_OPTS -P "$SSH_PORT" -r "ci@localhost:/tmp/vibes-qa" "$WORKDIR/" || true
 else
   echo "WARN: vm-qa.sh not found at $QA_SCRIPT, skipping deep QA." >&2
 fi
 
-# Graceful shutdown via SSH to collect clean journal state.
-ssh -o StrictHostKeyChecking=no \
-    -o UserKnownHostsFile=/dev/null \
-    -o ConnectTimeout=10 \
-    -i "$SSH_KEY" \
-    -p "$SSH_PORT" \
-    ci@localhost "sudo systemctl poweroff" >/dev/null 2>&1 || true
+# Graceful shutdown via SSH.
+ssh $SSH_OPTS -p "$SSH_PORT" ci@localhost "sudo systemctl poweroff" >/dev/null 2>&1 || true
 
 # Wait for QEMU to exit on its own after poweroff.
 shutdown_start="$(date +%s)"

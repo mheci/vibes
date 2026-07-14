@@ -7,12 +7,13 @@ Current base: `ghcr.io/ublue-os/bazzite-nvidia-open:latest` → published as `gh
 ## What's inside
 
 - **Base**: Bazzite NVIDIA Open (latest)
-- **Browsers**: Waterfox (RPM + Flatpak), Brave Origin (RPM with uBlock Origin policy), Firefox (RPM replacing Flatpak)
+- **Browsers**: Firefox (RPM), Brave Origin (with uBlock Origin policy), Waterfox (RPM + Flatpak)
 - **Development**: VS Code, Zed, opencode CLI + Desktop, Heroic Games Launcher
 - **AI**: LM Studio, Vicinae launcher
 - **Gaming**: Faugus Launcher, umu-launcher, LACT, MangoHud, GameScope, scx LAVD scheduler (performance mode)
 - **Audio**: High-quality PipeWire + WirePlumber configs, RNNoise stereo noise suppression
-- **GPU**: NVIDIA Open kernel modules (always latest), VAAPI/VDPAU/NVD acceleration defaults
+- **GPU**: NVIDIA Open kernel modules, VAAPI/VDPAU/NVD acceleration defaults
+- **Themes**: Darkly, Beauty-Plasma-Themes, macOS cursor packs
 - **System**: bpftune enabled, comprehensive codec & thumbnail support, nerd fonts, Arabic + English spellcheck
 
 ## Installation
@@ -34,7 +35,7 @@ To rebase an existing atomic Fedora installation to the latest build:
   ```
   rpm-ostree rebase ostree-image-signed:docker://ghcr.io/mheci/vibes:latest
   ```
-- Reboot again to complete the installation
+- Reboot again to complete the installation:
   ```
   systemctl reboot
   ```
@@ -45,15 +46,14 @@ The `latest` tag will automatically point to the latest build. That build will s
 
 Every successful build triggers a comprehensive validation pipeline:
 
-- **Static validation**: cosign signature verification, bootc container lint, filesystem smoke checks, SBOM generation
-- **Security scanning**: Trivy + Grype CVE scans with SARIF upload
-- **KVM boot test**: Full qcow2 conversion and QEMU/KVM boot with nested virtualization on GitHub Actions
-- **In-VM automated QA**: SSH-based health checks for kernel panics, systemd failures, GPU acceleration, audio stack, and critical packages
-- **Regression detection**: Package manifest comparison between builds
+- **Static validation**: cosign signature verification, `bootc container lint`, filesystem smoke checks for critical binaries and configs
+- **Security scanning**: Trivy CVE scan (CRITICAL + HIGH, unfixed only) with SARIF upload to GitHub Security tab
+- **KVM boot test**: Full qcow2 conversion via `bootc-image-builder` and QEMU/KVM boot with nested virtualization
+- **In-VM QA**: SSH-based health checks — kernel panics, systemd failures, GPU acceleration, audio stack, critical packages, fonts, spellcheck dictionaries
 
 ## ISO
 
-If building on Fedora Atomic, you can generate an offline ISO with the instructions available [here](https://blue-build.org/how-to/generate-iso/#_top). These ISOs cannot unfortunately be distributed on GitHub for free due to large sizes, so for public projects something else has to be used for hosting.
+If building on Fedora Atomic, you can generate an offline ISO with the instructions available [here](https://blue-build.org/how-to/generate-iso/#_top). These ISOs cannot be distributed on GitHub for free due to large sizes, so for public projects something else has to be used for hosting.
 
 ## Verification
 
