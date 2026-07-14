@@ -157,7 +157,11 @@ install_optional_packages() {
 install_first_available_package() {
   local pkg
   for pkg in "$@"; do
-    if package_available_or_installed "$pkg"; then
+    if rpm -q "$pkg" >/dev/null 2>&1; then
+      log "Package already installed: $pkg"
+      return 0
+    fi
+    if "${DNF[@]}" repoquery --available "$pkg" >/dev/null 2>&1; then
       retry "${DNF[@]}" install "$pkg"
       return 0
     fi
