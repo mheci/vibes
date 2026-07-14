@@ -282,4 +282,10 @@ write_theme_manifest
 smoke_check_theme_assets
 
 "${DNF[@]}" clean all
-rm -rf /var/cache/dnf /var/cache/libdnf5 /tmp/Darkly /tmp/darkly-gtk /tmp/Beauty-Plasma-Themes /tmp/macOsTahoeKdeTheme /tmp/WhiteSur-kde /tmp/McMojave-kde /tmp/WhiteSur-cursors /tmp/WhiteSur-icon-theme
+if [[ -d /var/cache/dnf ]]; then
+  find /var/cache/dnf -mindepth 1 -delete 2>/dev/null
+fi
+if [[ -d /var/cache/libdnf5 ]]; then
+  find /var/cache/libdnf5 -mindepth 1 -delete 2>/dev/null
+fi
+rm -rf /tmp/Darkly /tmp/darkly-gtk /tmp/Beauty-Plasma-Themes /tmp/macOsTahoeKdeTheme /tmp/WhiteSur-kde /tmp/McMojave-kde /tmp/WhiteSur-cursors /tmp/WhiteSur-icon-theme

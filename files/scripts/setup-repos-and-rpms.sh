@@ -524,4 +524,9 @@ UNIT
 fi
 
 "${DNF[@]}" clean all
-rm -rf /var/cache/dnf /var/cache/libdnf5
+if [[ -d /var/cache/dnf ]]; then
+  find /var/cache/dnf -mindepth 1 -delete 2>/dev/null
+fi
+if [[ -d /var/cache/libdnf5 ]]; then
+  find /var/cache/libdnf5 -mindepth 1 -delete 2>/dev/null
+fi
