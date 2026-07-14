@@ -270,6 +270,7 @@ install_required_packages \
   nvidia-settings
 install_first_available_package akmod-nvidia-open nvidia-open-dkms nvidia-open-kmod
 install_optional_packages nvidia-vaapi-driver
+install_first_available_package scx-tools-git scx-tools
 
 # Core desktop, gaming, media, codec, theming, and build dependencies.
 install_required_packages \
@@ -324,7 +325,6 @@ install_required_packages \
   qt6ct \
   sassc \
   scx-scheds \
-  scx-tools-git \
   steam \
   steam-devices \
   umu-launcher \
