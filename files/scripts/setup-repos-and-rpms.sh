@@ -280,36 +280,29 @@ install_required_packages \
   ffmpegthumbnailer \
   gamescope \
   gamemode \
-  gstreamer1-libav \
   gstreamer1-plugin-openh264 \
   gstreamer1-plugins-bad-free \
-  gstreamer1-plugins-bad-freeworld \
   gstreamer1-plugins-base \
   gstreamer1-plugins-good \
-  gstreamer1-plugins-ugly \
   gstreamer1-vaapi \
   gtk-murrine-engine \
   hicolor-icon-theme \
   hunspell \
   hunspell-ar \
   hunspell-en-US \
-  hyphen-ar \
   hyphen-en \
-  inter-fonts \
   jetbrains-mono-fonts \
   kio-extras \
   kitty \
   kvantum \
   kvantum-qt5 \
   libappstream-glib \
-  libavcodec-freeworld \
   libbpf \
   libbpf-devel \
   libcap \
   libcap-devel \
   libepoxy-devel \
   libgsf \
-  libheif-freeworld \
   libjxl \
   libjxl-utils \
   libnl3 \
@@ -369,9 +362,14 @@ install_optional_packages \
   google-noto-naskh-arabic-fonts \
   google-noto-sans-arabic-fonts \
   goverlay \
+  gstreamer1-libav \
+  gstreamer1-plugins-bad-freeworld \
+  gstreamer1-plugins-ugly \
   heif-pixbuf-loader \
   heroic \
   heroic-games-launcher \
+  hyphen-ar \
+  inter-fonts \
   kf5-kcmutils-devel \
   kf5-kirigami2-devel \
   kf5-kpackage-devel \
@@ -388,6 +386,8 @@ install_optional_packages \
   lame \
   liberation-sans-fonts \
   liberation-serif-fonts \
+  libavcodec-freeworld \
+  libheif-freeworld \
   llvm \
   lutris \
   nerd-fonts \
@@ -405,6 +405,8 @@ install_optional_packages \
   vkBasalt \
   webp-pixbuf-loader \
   winetricks \
+  x264 \
+  x265 \
   zlib-devel \
   "cmake(KDecoration3)" \
   "cmake(KF5ConfigWidgets)" \
