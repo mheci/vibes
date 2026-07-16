@@ -27,6 +27,7 @@ modules:
         install:
           - org.gnome.Loupe
           - it.mijorus.gearlever
+          - com.faugus.FaugusLauncher
       - scope: user
 
   - type: files
