@@ -77,6 +77,9 @@ add_copr bieszczaders/kernel-cachyos-addons
 # System fonts (require system-level installation)
 add_copr che/nerd-fonts
 
+# Faugus Launcher - No Flatpak available on Flathub, COPR only
+add_copr faugus/faugus-launcher
+
 # Enable terra repo if present (provided by base image)
 if [[ -f /etc/yum.repos.d/terra.repo ]]; then
   sed -i 's/^enabled=0/enabled=1/' /etc/yum.repos.d/terra.repo || true
