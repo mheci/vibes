@@ -64,11 +64,17 @@ REPO
 # =============================================================================
 echo "--- Enabling COPR repositories ---"
 
+# Enable COPR repositories for system-level packages only
+# Note: User applications should use Flatpak when available
 retry "${DNF[@]}" install --skip-unavailable dnf5-plugins dnf-plugins-core || true
 
-add_copr faugus/faugus-launcher
+# LACT - GPU monitoring/overclocking (requires kernel access, cannot be Flatpak)
 add_copr ilyaz/LACT
+
+# Kernel scheduler tools (require kernel-level access, cannot be Flatpak)
 add_copr bieszczaders/kernel-cachyos-addons
+
+# System fonts (require system-level installation)
 add_copr che/nerd-fonts
 
 # Enable terra repo if present (provided by base image)
@@ -144,7 +150,7 @@ echo "--- Installing desktop applications ---"
 
 install_available \
   brave-origin \
-  faugus-launcher kitty umu-launcher pcmanfm-qt \
+  kitty umu-launcher pcmanfm-qt \
   code lact scx-scheds scx-tools-git gamemode \
   mangohud gamescope
 
