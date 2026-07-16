@@ -26,6 +26,7 @@ modules:
         scope: system
         install:
           - org.gnome.Loupe
+          - it.mijorus.gearlever
       - scope: user
 
   - type: files

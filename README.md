@@ -1,84 +1,140 @@
 # ✨ vibes
 
-### *vibe-code your way to the perfect desktop* 🚀
+**The perfect desktop for gaming, media, and AI workflows** 🚀
 
-[![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml) [![iso build badge](https://github.com/mheci/vibes/actions/workflows/iso.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/iso.yml)
+[![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml)
+[![iso build badge](https://github.com/mheci/vibes/actions/workflows/iso.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/iso.yml)
 
-> **the vibe**: a buttery-smooth, gpu-accelerated, ai-ready workstation that just *feels* right.
+A buttery-smooth, GPU-accelerated, AI-ready workstation built on [BlueBuild](https://blue-build.org/) and [Bazzite](https://bazzite.gg/). No broken configs, no boot loops, just vibes.
 
-built on [bluebuild](https://blue-build.org/) and [bazzite](https://bazzite.gg/) — because life's too short for broken configs and boot loops.
-
----
-
-## 🎨 what's the vibe?
-
-```
-ghcr.io/ublue-os/bazzite-nvidia-open:latest → ghcr.io/mheci/vibes
-```
-
-### 🎮 gaming
-heroic games launcher · faugus launcher · umu-launcher · lact gpu control · mangohud · gamescope · scx lavd scheduler (gaming mode, always performance)
-
-### 💻 development
-vs code · zed · opencode cli + desktop · kitty terminal
-
-### 🤖 ai / ml
-lm studio · vicinae launcher · nvidia container toolkit
-
-### 🌐 browsing
-firefox (rpm, hardware-accelerated) · brave origin (ublock origin pre-installed)
-
-### 🎵 audio
-pipewire + wireplumber tuned for low-latency · rnnoise stereo noise suppression · realtime scheduling · 48khz default · bluetooth a2dp-first
-
-### 🖥️ desktop polish
-darkly theme · beauty-plasma-themes · macos cursor packs · qt disk shader cache force-enabled · nvidia vaapi/vdpau/nvd acceleration · wayland-first
-
-### 📦 multimedia
-ffmpeg · gstreamer full suite · vaapi · h264/h265/av1/vp9 · thumbnails for everything · heif/jxl/webp/raw support
-
-### 🔤 fonts & language
-nerd fonts · jetbrains mono · fira code · cascadia code · noto arabic · hunspell en + ar spellcheck
+**Base Image:** `ghcr.io/ublue-os/bazzite-nvidia-open:latest` → `ghcr.io/mheci/vibes`
 
 ---
 
-## 🚀 installation
+## 📦 What's Included
 
-### via iso
-download the latest iso from the [actions tab](https://github.com/mheci/vibes/actions/workflows/iso.yml) (click the most recent successful run → artifacts section at the bottom), flash it to a usb with [fedora media writer](https://www.fedoraproject.org/en/workstation/download) or [balena etcher](https://etcher.balena.io/), and boot it.
+### 🎮 Gaming
+- **Heroic Games Launcher** - Epic Games, GOG, and Amazon Games
+- **Faugus Launcher** - Proton launcher with advanced features
+- **umu-launcher** - Universal Proton launcher
+- **LACT** - GPU monitoring and overclocking tool
+- **MangoHud** - Performance monitoring overlay
+- **Gamescope** - Micro-compositor for gaming
+- **scx LAVD Scheduler** - Gaming-focused CPU scheduler
 
-### via rebase
-> ⚠️ **atomic rebasing is experimental** — you've been warned
+### 💻 Development
+- **VS Code** - Full-featured code editor
+- **Zed** - High-performance code editor
+- **OpenCode** - AI coding assistant (CLI + Desktop)
+- **Kitty** - GPU-accelerated terminal emulator
 
-rebase an existing atomic fedora install to the latest build:
+### 🤖 AI / ML
+- **LM Studio** - Local LLM inference
+- **Vicinae** - AI-powered launcher
+- **NVIDIA Container Toolkit** - GPU acceleration for containers
+
+### 🌐 Browsing
+- **Firefox** - RPM package with hardware acceleration
+- **Brave Origin** - Privacy-focused browser with uBlock Origin pre-installed
+
+### 🎵 Audio
+- **PipeWire** - Low-latency audio/video routing
+- **WirePlumber** - Session manager for PipeWire
+- **RNNoise** - Stereo noise suppression
+- **48kHz default** - Professional audio quality
+- **Bluetooth A2DP** - High-quality audio streaming
+
+### 🖥️ Desktop
+- **KDE Plasma** - Wayland-first desktop environment
+- **Darkly Theme** - Modern dark theme
+- **Beauty Plasma Themes** - Additional theme collection
+- **macOS Cursor Packs** - Polished cursor themes
+- **Qt Disk Shader Cache** - Optimized desktop performance
+- **NVIDIA Hardware Acceleration** - VA-API/VDPAU/NVD
+
+### 📦 Multimedia
+- **FFmpeg** - Complete codec support
+- **GStreamer** - Full multimedia framework
+- **Hardware Acceleration** - VA-API for video decoding
+- **Codecs** - H.264/H.265/AV1/VP9
+- **Thumbnailers** - HEIF/JXL/WebP/RAW support
+
+### 🔤 Fonts & Language
+- **Nerd Fonts** - Developer-friendly fonts
+- **JetBrains Mono** - Coding font
+- **Fira Code** - Programming font with ligatures
+- **Cascadia Code** - Microsoft's coding font
+- **Noto Arabic** - Complete Arabic language support
+- **Spellcheck** - English and Arabic dictionaries
+
+### 🛠️ System Utilities
+- **Gear Lever** - AppImage manager
+- **LACT** - GPU monitoring and overclocking
+- **bpftune** - BPF-based network auto-tuning
+- **scx-tools** - Scheduler ext tools
+
+---
+
+## 🚀 Installation
+
+### Option 1: ISO Installation (Recommended)
+
+1. Download the latest ISO from [GitHub Actions](https://github.com/mheci/vibes/actions/workflows/iso.yml)
+2. Click the most recent successful build
+3. Download the artifact from the "Artifacts" section
+4. Flash to USB using [Fedora Media Writer](https://www.fedoraproject.org/en/workstation/download) or [Balena Etcher](https://etcher.balena.io/)
+5. Boot from USB and install
+
+### Option 2: Rebase Existing Atomic Fedora
+
+> ⚠️ **Note:** Atomic rebasing is experimental. Proceed with caution.
 
 ```bash
-# step 1: rebase to unsigned image (gets signing keys installed)
+# Step 1: Rebase to unsigned image (installs signing keys)
 rpm-ostree rebase ostree-unverified-registry:ghcr.io/mheci/vibes:latest
 
-# step 2: reboot
+# Step 2: Reboot
 systemctl reboot
 
-# step 3: rebase to signed image (verifies the real deal)
+# Step 3: Rebase to signed image (verifies authenticity)
 rpm-ostree rebase ostree-image-signed:docker://ghcr.io/mheci/vibes:latest
 
-# step 4: final reboot
+# Step 4: Final reboot
 systemctl reboot
 ```
 
-*the `latest` tag always points to the most recent build. you won't accidentally jump major versions.*
+The `latest` tag always points to the most recent build. You won't accidentally jump to a new major version.
 
 ---
 
-## 🔐 verification
+## 🔐 Image Verification
 
-images are signed with [sigstore](https://www.sigstore.dev/)'s [cosign](https://github.com/sigstore/cosign).
+All images are cryptographically signed with [Sigstore cosign](https://www.sigstore.dev/).
 
 ```bash
-# grab the public key from this repo, then:
+# Verify the image signature
 cosign verify --key cosign.pub ghcr.io/mheci/vibes
 ```
 
 ---
 
-*no waterfox. no fluff. just vibes.* ✨
+## 🏗️ Build Pipeline
+
+- **Daily Builds:** Automatic builds at 06:00 UTC
+- **Cosign Signing:** Every image is signed for authenticity
+- **Layer Caching:** Optimized build times
+- **ISO Generation:** Automated ISO creation after successful builds
+
+---
+
+## 📝 Notes
+
+- Firefox is installed as an RPM (not Flatpak) for better codec support
+- Brave includes uBlock Origin as a forced extension
+- NVIDIA drivers are open-source (`nvidia-open-dkms`)
+- All packages are verified against official repositories
+- Build artifacts are cached for faster subsequent builds
+
+---
+
+*No bloat. No fluff. Just vibes.* ✨
