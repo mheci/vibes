@@ -4,6 +4,7 @@
 
 [![bluebuild build badge](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml)
 [![iso build badge](https://github.com/mheci/vibes/actions/workflows/iso.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/iso.yml)
+[![validate badge](https://github.com/mheci/vibes/actions/workflows/validate.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/validate.yml)
 
 A buttery-smooth, GPU-accelerated, AI-ready workstation built on [BlueBuild](https://blue-build.org/) and [Bazzite](https://bazzite.gg/). No broken configs, no boot loops, just vibes.
 
@@ -79,6 +80,8 @@ A buttery-smooth, GPU-accelerated, AI-ready workstation built on [BlueBuild](htt
 
 ### Option 1: ISO Installation (Recommended)
 
+> 💡 **Tip:** GitHub requires you to be signed in to download build artifacts.
+
 1. Download the latest ISO from [GitHub Actions](https://github.com/mheci/vibes/actions/workflows/iso.yml)
 2. Click the most recent successful build
 3. Download the artifact from the "Artifacts" section
@@ -121,9 +124,11 @@ cosign verify --key cosign.pub ghcr.io/mheci/vibes
 ## 🏗️ Build Pipeline
 
 - **Daily Builds:** Automatic builds at 06:00 UTC
+- **Fast Validation:** ShellCheck + actionlint + recipe structure checks gate every push/PR in seconds
 - **Cosign Signing:** Every image is signed for authenticity
 - **Layer Caching:** Optimized build times
-- **ISO Generation:** Automated ISO creation after successful builds
+- **ISO Generation:** Automated ISO creation after successful `main` branch builds
+- **Pinned Tooling:** Third-party actions and lint tools are version- and checksum-pinned
 
 ---
 
