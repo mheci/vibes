@@ -88,6 +88,17 @@ A buttery-smooth, GPU-accelerated, AI-ready workstation built on [BlueBuild](htt
 4. Flash to USB using [Fedora Media Writer](https://www.fedoraproject.org/en/workstation/download) or [Balena Etcher](https://etcher.balena.io/)
 5. Boot from USB and install
 
+### Verify Your ISO (recommended)
+
+Every ISO artifact ships with a `vibes-latest.iso-CHECKSUM` file (and CI
+re-verifies the checksum before upload). After downloading and unzipping:
+
+```bash
+sha256sum vibes-latest.iso   # compare with the hash in vibes-latest.iso-CHECKSUM
+```
+
+If the hashes differ, do not flash the ISO — re-download it.
+
 ### Option 2: Rebase Existing Atomic Fedora
 
 > ⚠️ **Note:** Atomic rebasing is experimental. Proceed with caution.
