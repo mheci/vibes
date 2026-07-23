@@ -103,6 +103,31 @@ for extra in sorted((ROOT / ".github").rglob("*.yml")):
     if load_yaml(extra) is not None:
         ok(f"{extra.relative_to(ROOT)} parses")
 
+# --- action pin policy ----------------------------------------------------------
+# Hard-learned rule (iteration 1): no floating branch refs (@main, @master,
+# @trunk, @HEAD) in `uses:` lines — pin releases or SHAs so a force-push to a
+# third-party branch can never change our builds. Major version tags (@v4)
+# and full SHAs are fine; local (./) and docker:// actions are exempt.
+FLOATING_REFS = {"main", "master", "trunk", "HEAD", "latest", "stable", "edge"}
+uses_pattern = re.compile(r"uses:\s*['\"]?([^\s'\"]+)['\"]?")
+policy_failed = False
+for wf in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+    for lineno, line in enumerate(wf.read_text().splitlines(), start=1):
+        m = uses_pattern.search(line)
+        if not m:
+            continue
+        action = m.group(1)
+        if action.startswith(("./", "docker://")) or "@" not in action:
+            continue  # local path, docker image w/o tag parsing, or bare (rare)
+        ref = action.rsplit("@", 1)[1]
+        if ref in FLOATING_REFS:
+            fail(f"{wf.name}:{lineno}: floating ref @{ref} in `uses: {action}` — pin a release tag or SHA")
+            policy_failed = True
+        else:
+            ok(f"{wf.name}:{lineno}: pinned {action}")
+if not policy_failed:
+    ok("no floating action refs found")
+
 print()
 if errors:
     print(f"{len(errors)} validation error(s)", file=sys.stderr)
