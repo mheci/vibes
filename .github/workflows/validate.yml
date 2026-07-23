@@ -1,0 +1,59 @@
+name: validate
+
+# Fast (seconds) pre-flight gate so trivially broken states never reach the
+# 30+ minute image build: shell syntax + static analysis, workflow lint, and
+# a structural check of the BlueBuild recipe and referenced files.
+on:
+  push:
+    paths-ignore: # skip when only docs changed (mirrors build.yml)
+      - "**.md"
+      - "LICENSE"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Shell, workflow & recipe validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck (pinned + checksum-verified)
+        run: |
+          curl -fsSL -o /tmp/shellcheck.tar.xz \
+            https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.linux.x86_64.tar.xz
+          echo "6c881ab0698e4e6ea235245f22832860544f17ba386442fe7e9d629f8cbedf87  /tmp/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/shellcheck.tar.xz -C /tmp
+          sudo install -m 0755 /tmp/shellcheck-v0.10.0/shellcheck /usr/local/bin/shellcheck
+
+      - name: Shellcheck build scripts
+        run: |
+          mapfile -t scripts < <(find files/scripts -type f -name '*.sh' | sort)
+          echo "Checking: ${scripts[*]}"
+          for f in "${scripts[@]}"; do bash -n "$f"; done
+          shellcheck -S style "${scripts[@]}"
+
+      - name: Install actionlint (pinned + checksum-verified)
+        run: |
+          curl -fsSL -o /tmp/actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          echo "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757  /tmp/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          sudo install -m 0755 /tmp/actionlint /usr/local/bin/actionlint
+
+      - name: Lint GitHub Actions workflows
+        run: actionlint .github/workflows/*.yml
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Validate recipe structure and referenced files
+        run: python3 .github/scripts/validate_recipe.py
