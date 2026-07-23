@@ -162,8 +162,16 @@ rm -rf /tmp/linux-rnnoise /tmp/linux-rnnoise.zip
 echo "Building and installing bpftune from upstream..."
 "${DNF[@]}" install --skip-unavailable kernel-headers kernel-devel gcc make libbpf libbpf-devel libcap libcap-devel libnl3 libnl3-devel python3-docutils elfutils-libelf-devel pkgconf-pkg-config zlib-devel
 
+# Pinned to the exact upstream commit verified green in CI (2026-07-23 build).
+# oracle/bpftune has no release tags (only Oracle Linux packaging tags) and
+# its main branch is slow-moving; bump BPFTUNE_PIN deliberately, never drift.
+BPFTUNE_PIN="4712347f2da0b7d4a5fbdb0d81d071c1704b3f20"
 rm -rf /tmp/bpftune
-retry git clone --depth 1 https://github.com/oracle/bpftune.git /tmp/bpftune
+install -d -m 0755 /tmp/bpftune
+git -C /tmp/bpftune init -q
+git -C /tmp/bpftune remote add origin https://github.com/oracle/bpftune.git
+retry git -C /tmp/bpftune fetch -q --depth 1 origin "$BPFTUNE_PIN"
+git -C /tmp/bpftune checkout -q FETCH_HEAD
 make -C /tmp/bpftune -j"$(nproc)"
 make -C /tmp/bpftune install
 ldconfig || true
