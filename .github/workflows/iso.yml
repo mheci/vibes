@@ -3,6 +3,9 @@ name: Build ISO
 on:
   workflow_run:
     workflows: [bluebuild]
+    # Only follow builds that ran on the default branch. Prevents wasted
+    # ISO builds (of the stale `latest` tag) after PR/other-branch builds.
+    branches: [main]
     types: [completed]
   workflow_dispatch:
 
@@ -20,14 +23,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Maximize build space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@v1.3.1 # SHA-identical to @main at pin time
         with:
           tool-cache: true
           large-packages: true
           docker-images: false
 
       - name: Build ISO
-        uses: jasonn3/build-container-installer@main
+        uses: jasonn3/build-container-installer@v1.5.0 # SHA-identical to @main at pin time
         id: build
         with:
           arch: x86_64
