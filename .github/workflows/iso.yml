@@ -43,6 +43,24 @@ jobs:
           secure_boot_key_url: ''
           enrollment_password: ''
 
+      - name: Verify ISO checksum
+        run: |
+          set -euo pipefail
+          dir="${{ steps.build.outputs.iso_path }}"
+          iso="${{ steps.build.outputs.iso_name }}"
+          echo "Verifying ${iso} against its published checksum…"
+          sum_now="$(sha256sum "${dir}/${iso}" | awk '{print $1}')"
+          sum_ref="$(grep -Eo '[0-9a-f]{64}' "${dir}/${iso}-CHECKSUM" | head -n1 || true)"
+          if [[ -z "$sum_ref" ]]; then
+            echo "::error::could not extract a sha256 from ${iso}-CHECKSUM"
+            exit 1
+          fi
+          if [[ "$sum_now" != "$sum_ref" ]]; then
+            echo "::error::checksum mismatch: computed ${sum_now}, expected ${sum_ref}"
+            exit 1
+          fi
+          echo "Checksum OK: ${sum_now}"
+
       - name: Upload ISO
         uses: actions/upload-artifact@v4
         with:
