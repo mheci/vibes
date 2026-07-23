@@ -247,4 +247,10 @@ fi
 "${DNF[@]}" clean all || true
 # Note: /var/cache/libdnf5 is a BuildKit cache mount and cannot be removed.
 
+# Remove build-time /var and /run artifacts flagged by `bootc container lint`
+# (regenerated at runtime, must not ship in image layers).
+rm -f /var/log/dnf5.log* /var/log/dnf.librepo.log* /var/log/hawkey.log* \
+      /var/cache/ldconfig/aux-cache || true
+rm -rf /var/lib/dnf /var/cache/dnf /run/dnf || true
+
 echo "=== Latest applications installed successfully ==="
