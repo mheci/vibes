@@ -96,6 +96,13 @@ retry "${DNF[@]}" makecache
 
 # Install packages that are available in enabled repos.
 # Packages not found in any repo are skipped with a warning.
+#
+# Note: per-package `repoquery --available` is deliberate. A bulk-enumeration
+# snapshot was tried and reverted (see git history): dnf5 repoquery cannot be
+# relied on to enumerate the full available set in the build container (both
+# the no-spec and explicit '*' forms return an installed-only subset), and a
+# silently-incomplete cache is far worse than the ~1-2 minutes these lookups
+# cost. Correctness over speculative speed.
 install_available() {
   local pkgs=("$@") available=() pkg
   for pkg in "${pkgs[@]}"; do
@@ -330,5 +337,14 @@ fi
 echo "--- Cleaning up ---"
 "${DNF[@]}" clean all || true
 # Note: /var/cache/libdnf5 is a BuildKit cache mount and cannot be removed.
+
+# Remove build-time /var and /run artifacts flagged by `bootc container lint`
+# (var-tmpfiles / nonempty-run-tmp warnings). Logs, dnf metadata, and the
+# ldconfig aux-cache are runtime-regenerated state that must not be committed
+# to image layers. (/var/lib/flatpak, /var/lib/alternatives stay: they are
+# real shipped content — system flatpaks and alternatives DB entries.)
+rm -f /var/log/dnf5.log* /var/log/dnf.librepo.log* /var/log/hawkey.log* \
+      /var/cache/ldconfig/aux-cache || true
+rm -rf /var/lib/dnf /var/cache/dnf /run/dnf || true
 
 echo "=== Repositories and RPM packages configured successfully ==="
