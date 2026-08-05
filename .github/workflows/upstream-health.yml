@@ -1,0 +1,26 @@
+name: Upstream Health
+
+on:
+  schedule:
+    - cron: "0 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check upstream sources
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Check referenced upstream URLs, tags and assets
+        run: bash .github/scripts/check-upstream.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

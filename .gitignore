@@ -1,0 +1,6 @@
+cosign.key
+cosign.private
+/Containerfile
+*.iso
+*.iso-CHECKSUM
+.mailmap

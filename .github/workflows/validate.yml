@@ -1,0 +1,73 @@
+name: validate
+
+on:
+  push:
+    paths-ignore:
+      - "LICENSE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Shell, workflow & recipe validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Install shellcheck
+        run: |
+          curl -fsSL -o /tmp/shellcheck.tar.xz \
+            https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  /tmp/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/shellcheck.tar.xz -C /tmp
+          sudo install -m 0755 /tmp/shellcheck-v0.11.0/shellcheck /usr/local/bin/shellcheck
+
+      - name: Shellcheck build scripts
+        run: |
+          # Run from files/scripts/ so shellcheck can resolve the sourced
+          # lib.sh path via the # shellcheck source=lib.sh directives.
+          cd files/scripts
+          mapfile -t scripts < <(find . -type f -name '*.sh' | sort)
+          echo "Checking: ${scripts[*]}"
+          for f in "${scripts[@]}"; do bash -n "$f"; done
+          shellcheck -S style "${scripts[@]}"
+          cd ../..
+          shellcheck -S style .github/scripts/*.sh
+
+      - name: Install actionlint
+        run: |
+          curl -fsSL -o /tmp/actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          sudo install -m 0755 /tmp/actionlint /usr/local/bin/actionlint
+
+      - name: Lint GitHub Actions workflows
+        run: actionlint .github/workflows/*.yml
+
+      - name: Install yamllint
+        run: pip install -r .github/requirements-ci.txt
+
+      - name: Lint YAML files
+        run: |
+          yamllint -c .yamllint.yaml .github/ recipes/
+
+      - name: Install markdownlint-cli
+        run: npm install -g markdownlint-cli@0.49.1
+
+      - name: Lint Markdown files
+        run: |
+          markdownlint --config .markdownlint.json ./*.md .github/
+
+      - name: Validate recipe structure and referenced files
+        run: python3 .github/scripts/validate_recipe.py

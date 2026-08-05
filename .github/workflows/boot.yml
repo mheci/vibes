@@ -1,0 +1,138 @@
+name: Boot Test
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+    inputs:
+      image_ref:
+        description: "Image to boot-test (default: ghcr.io/<owner>/vibes:latest)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  qemu-boot:
+    name: Boot test (QEMU)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Maximize build space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+          large-packages: true
+          docker-images: false
+
+      - name: Install cosign
+        run: |
+          # v2.6.4 dropped the *-linux-amd64.tar.gz tarball in favor of a bare
+          # binary and signed attestations (rpm/deb also available).
+          curl -fsSL -o /tmp/cosign \
+            https://github.com/sigstore/cosign/releases/download/v2.6.4/cosign-linux-amd64
+          chmod +x /tmp/cosign
+          sudo install -m 0755 /tmp/cosign /usr/local/bin/cosign
+
+      - name: Resolve image reference
+        id: image
+        run: |
+          IMG="${{ inputs.image_ref }}"
+          if [[ -z "${IMG}" ]]; then
+            IMG="ghcr.io/${{ github.repository_owner }}/vibes:latest"
+          fi
+          echo "Boot-testing image: ${IMG}"
+          echo "image=${IMG}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify image signature
+        run: |
+          cosign verify --key cosign.pub \
+            ${{ steps.image.outputs.image }} | tail -n 3
+
+      - name: Install podman and QEMU
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman qemu-system-x86
+
+      - name: Build bootable disk image
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          truncate -s 32G output/vibes.raw
+          # bootc install to-disk writes the image to a raw disk via loopback.
+          # /var/lib/containers is bind-mounted so bootc can resolve the image
+          # it is running from, and /dev so loopback devices can be created.
+          BOOTC_DIRECT_IO=on sudo podman run --rm --privileged \
+            --pid=host --ipc=host --security-opt label=type:unconfined_t \
+            -v /dev:/dev \
+            -v /var/lib/containers:/var/lib/containers \
+            -v "$(pwd)/output:/output" \
+            ${{ steps.image.outputs.image }} \
+            bootc install to-disk --generic-image --via-loopback \
+            --filesystem xfs \
+            --karg console=ttyS0,115200 \
+            --karg systemd.unit=multi-user.target \
+            /output/vibes.raw
+
+      - name: Boot in QEMU and verify
+        run: |
+          set -euo pipefail
+          ACCEL="tcg"
+          CPU="max"
+          if [[ -r /dev/kvm ]] && [[ -w /dev/kvm ]]; then
+            ACCEL="kvm"
+            CPU="host"
+          fi
+          echo "Using accel=${ACCEL}"
+          timeout 1500 qemu-system-x86_64 -machine accel=${ACCEL} \
+            -cpu ${CPU} -smp 4 -m 4096 -nographic -no-reboot \
+            -drive file=output/vibes.raw,format=raw,if=virtio \
+            -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+            > serial.log 2>&1 &
+          qemu_pid=$!
+          ok=0
+          for _ in $(seq 1 300); do
+            if grep -q "login:" serial.log; then
+              ok=1
+              echo "Boot reached login prompt"
+              break
+            fi
+            if grep -q "Kernel panic" serial.log; then
+              echo "::error::Kernel panic detected"
+              break
+            fi
+            if ! kill -0 "$qemu_pid" 2>/dev/null && ! grep -q "login:" serial.log; then
+              echo "::error::QEMU exited before boot completed"
+              break
+            fi
+            sleep 5
+          done
+          kill "$qemu_pid" 2>/dev/null || true
+          if grep -q "Started bpftune.service" serial.log; then
+            echo "OK: bpftune.service started"
+          else
+            echo "WARN: bpftune.service start not observed on console"
+          fi
+          if [[ $ok -ne 1 ]]; then
+            echo "::error::Boot test failed; serial log tail:"
+            tail -n 120 serial.log
+            exit 1
+          fi
+          grep -E "Reached target|Started bpftune|login:" serial.log | tail -n 20 || true
+
+      - name: Upload serial log
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: boot-serial-log
+          path: serial.log
+          if-no-files-found: warn
+          retention-days: 14

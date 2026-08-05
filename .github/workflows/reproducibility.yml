@@ -1,0 +1,67 @@
+name: Reproducibility Check
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    name: Rebuild without cache
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Free disk space
+        # The BlueBuild action's own free-disk-space step skips purging when
+        # >= 80G is free, but build-chunked-oci rechunking needs ~2x the image
+        # size in transient storage (ostree repo + new layers) and overflows
+        # even that. Purge unconditionally before the rebuild starts.
+        uses: hastd/free-disk-space@68572aeaadb7f76bd408246328e95926323402b5 # v0.1.2
+
+      - name: Rebuild recipe with cache disabled
+        uses: blue-build/github-action@v1.12.0
+        with:
+          recipe: recipe.yml
+          cosign_private_key: ${{ secrets.SIGNING_SECRET || '' }}
+          push: false
+          pr_event_number: ''
+          maximize_build_space: true
+          use_cache: false
+          # Same chunked-OCI path as the daily build, to also validate the
+          # rpm-ostree build-chunked-oci step on a from-scratch rebuild.
+          build_chunked_oci: true
+          # rpm-ostree 2026.2's ostree-ext panics (chunking.rs:423) when
+          # re-chunking against an existing chunked image as baseline, so
+          # always build the layer plan from scratch.
+          rechunk_clear_plan: true
+          verify_install: true
+
+      - name: Report build result
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${{ github.repository_owner }}/vibes:latest"
+          {
+            echo "### Reproducibility check"
+            echo ""
+            echo "The recipe was rebuilt from scratch with the layer cache disabled."
+            echo "This catches upstream breakage (base image, packages, downloads)"
+            echo "between daily builds. Local build tags:"
+            echo ""
+            docker images --format '- {{.Repository}}:{{.Tag}} ({{.ID}})' \
+              | grep "${IMAGE%:latest}" || echo "- (none)"
+            echo ""
+            echo "> The local image ID is the config digest; the published manifest"
+            echo "> digest is shown in the daily build logs. ostree images are not"
+            echo "> byte-identical across rebuilds (commit timestamps), so a digest"
+            echo "> mismatch is expected and not a failure of this job."
+          } >> "$GITHUB_STEP_SUMMARY"

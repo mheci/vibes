@@ -1,0 +1,7 @@
+rules:
+  line-length: disable
+  brackets: disable
+  comments: disable
+  comments-indentation: disable
+  document-start: disable
+  truthy: disable

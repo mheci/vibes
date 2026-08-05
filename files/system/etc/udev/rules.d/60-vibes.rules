@@ -1,0 +1,10 @@
+# Vibes udev rules
+
+# Grant logged-in users access to HID devices (gamepads, controller
+# configurator tools like Wooting/Hydra, etc.)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", TAG+="uaccess"
+
+# Default CPU governor: performance (max boost clocks on all cores). Applies
+# on cpu add/online, matching the gaming-focused tuning of this image; only
+# applies when the cpufreq interface exists (intel_pstate/amd_pstate).
+KERNEL=="cpu[0-9]*", SUBSYSTEM=="cpu", ACTION=="add|online", TEST=="cpufreq/scaling_governor", ATTR{cpufreq/scaling_governor}="performance"

@@ -1,0 +1,72 @@
+name: bluebuild
+
+on:
+  schedule:
+    - cron: "00 06 * * *"
+  push:
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
+      - "SUPPORT.md"
+      - ".editorconfig"
+      - ".markdownlint.json"
+      - ".yamllint.yaml"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  bluebuild:
+    name: Build Custom Image
+    runs-on: ubuntu-latest
+    env:
+      # Secrets are unavailable on runs triggered by Dependabot or forks, both
+      # pull_request and push events on their branches. Without SIGNING_SECRET
+      # the blue-build action fails on signing key lookup (cosign.pub present,
+      # key empty), so skip the image build entirely in that case; the validate
+      # workflow still covers the changes.
+      SIGNING_KEY: ${{ secrets.SIGNING_SECRET || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        recipe:
+          - recipe.yml
+    steps:
+      - name: Free disk space
+        # The BlueBuild action's own free-disk-space step skips purging when
+        # >= 80G is free, but build-chunked-oci rechunking needs ~2x the image
+        # size in transient storage (ostree repo + new layers) and overflows
+        # even that. Purge unconditionally before the build starts.
+        uses: hastd/free-disk-space@68572aeaadb7f76bd408246328e95926323402b5 # v0.1.2
+      - name: Build Custom Image
+        if: env.SIGNING_KEY != ''
+        uses: blue-build/github-action@v1.12.0
+        with:
+          recipe: ${{ matrix.recipe }}
+          cosign_private_key: ${{ secrets.SIGNING_SECRET || '' }}
+          registry_token: ${{ github.token }}
+          pr_event_number: ${{ github.event.number }}
+          maximize_build_space: true
+          retry_push_count: 3
+          use_cache: true
+          # Re-chunk the bootc image into balanced OCI layers
+          # (rpm-ostree compose build-chunked-oci) so bootc/rpm-ostree
+          # upgrades download only the chunks that changed between builds.
+          build_chunked_oci: true
+          # rpm-ostree 2026.2's ostree-ext panics (chunking.rs:423) when
+          # re-chunking against an existing chunked image as baseline, so
+          # always build the layer plan from scratch.
+          rechunk_clear_plan: true
+          verify_install: true

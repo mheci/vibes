@@ -1,0 +1,98 @@
+name: OpenQA Boot Test
+
+on:
+  schedule:
+    - cron: "30 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  openqa-boot:
+    name: Boot test (openQA isotovideo)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Maximize build space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+          large-packages: true
+          docker-images: false
+
+      - name: Install cosign
+        run: |
+          # v2.6.4 dropped the *-linux-amd64.tar.gz tarball in favor of a bare
+          # binary and signed attestations (rpm/deb also available).
+          curl -fsSL -o /tmp/cosign \
+            https://github.com/sigstore/cosign/releases/download/v2.6.4/cosign-linux-amd64
+          chmod +x /tmp/cosign
+          sudo install -m 0755 /tmp/cosign /usr/local/bin/cosign
+
+      - name: Verify image signature
+        run: |
+          cosign verify --key cosign.pub \
+            ghcr.io/${{ github.repository_owner }}/vibes:latest
+
+      - name: Install podman and QEMU
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman qemu-system-x86
+
+      - name: Build bootable disk image
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          truncate -s 32G output/vibes.raw
+          # bootc install to-disk writes the image to a raw disk via loopback.
+          # /var/lib/containers is bind-mounted so bootc can resolve the image
+          # it is running from, and /dev so loopback devices can be created.
+          BOOTC_DIRECT_IO=on sudo podman run --rm --privileged \
+            --pid=host --ipc=host --security-opt label=type:unconfined_t \
+            -v /dev:/dev \
+            -v /var/lib/containers:/var/lib/containers \
+            -v "$(pwd)/output:/output" \
+            ghcr.io/${{ github.repository_owner }}/vibes:latest \
+            bootc install to-disk --generic-image --via-loopback \
+            --filesystem xfs \
+            --karg console=ttyS0,115200 \
+            --karg systemd.unit=multi-user.target \
+            /output/vibes.raw
+
+      - name: Run openQA isotovideo
+        run: |
+          set -euo pipefail
+          # The official isotovideo container runs os-autoinst against the
+          # disk image with the qemu backend. qemu_no_kvm=1 forces TCG
+          # (GitHub runners have no /dev/kvm). The tests in openqa/ use
+          # wait_serial, which reads the serial0 log the qemu backend
+          # always produces, so no needles are involved.
+          podman run --rm \
+            -v "$(pwd)/openqa:/tests:Z" \
+            -v "$(pwd)/output:/img:Z" \
+            registry.opensuse.org/devel/openqa/containers/isotovideo:qemu-x86 \
+            --exit-status-from-test-results \
+            qemu_no_kvm=1 \
+            casedir=/tests \
+            OUTPUTDIR=/tests/output \
+            HDD_1=/img/vibes.raw \
+            QEMURAM=4096 \
+            QEMUCPUS=4 \
+            TEST=0001-vibes-boot
+
+      - name: Upload openQA results
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: openqa-results
+          path: openqa/output
+          if-no-files-found: warn
+          retention-days: 14
