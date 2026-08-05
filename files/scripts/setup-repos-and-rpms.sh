@@ -93,30 +93,20 @@ add_copr lihaohong/yazi
 retry "${DNF[@]}" makecache
 
 # =============================================================================
-# Firefox (RPM, not Flatpak)
+# Browser policy: Firefox is intentionally NOT shipped (RPM or Flatpak).
+# The Flatpak Firefox that the base image carries is uninstalled from the
+# system scope so the image has no Firefox at all.
 # =============================================================================
-echo "--- Installing Firefox RPM ---"
+echo "--- Removing Firefox from the base image ---"
 
-# Remove Flatpak Firefox if present (prefer native RPM for codec support)
 if command -v flatpak >/dev/null 2>&1; then
   if flatpak list --system 2>/dev/null | grep -q org.mozilla.firefox; then
     flatpak uninstall --system -y org.mozilla.firefox || true
   fi
 fi
 
-# Remove conflicting openh264 packages before installing Firefox RPM
-for pkg in openh264 mozilla-openh264 gstreamer1-plugin-openh264; do
-  if rpm -q "$pkg" >/dev/null 2>&1; then
-    "${DNF[@]}" remove --no-autoremove "$pkg" || true
-  fi
-done
-
 if rpm -q firefox >/dev/null 2>&1; then
-  echo "INFO: firefox already installed, skipping" >&2
-else
-  retry "${DNF[@]}" install --skip-unavailable --skip-broken firefox || \
-    retry "${DNF[@]}" install --skip-unavailable --skip-broken --setopt=install_weak_deps=False firefox || \
-    echo "WARN: firefox RPM install failed, continuing" >&2
+  "${DNF[@]}" remove --no-autoremove firefox || true
 fi
 
 # =============================================================================
@@ -233,7 +223,8 @@ install_available \
   code lact \
   gamescope \
   ananicy-cpp \
-  faugus-launcher
+  faugus-launcher \
+  tmux lollypop rhythmbox fragments
 
 # =============================================================================
 # GNOME desktop additions
@@ -266,7 +257,7 @@ install_available \
 echo "--- Installing CLI tools ---"
 
 install_available \
-  uv helix yt-dlp gh zoxide just
+  uv helix yt-dlp gh zoxide just trivy
 
 # =============================================================================
 # Just command runner (vjust wrapper for the Vibes justfile)
@@ -336,7 +327,7 @@ install_available \
 echo "--- Installing multimedia codecs ---"
 
 install_available \
-  ffmpeg ffmpeg-libs libavcodec-freeworld mozilla-openh264 \
+  ffmpeg ffmpeg-libs libavcodec-freeworld \
   gstreamer1-plugin-openh264 gstreamer1-plugins-base gstreamer1-plugins-good \
   gstreamer1-plugins-bad-free gstreamer1-plugins-bad-freeworld \
   gstreamer1-plugins-ugly gstreamer1-libav gstreamer1-vaapi \
@@ -390,32 +381,12 @@ install_available \
   git make gcc clang llvm bpftool nodejs npm jq unzip rsync file which \
   libbpf libbpf-devel libcap libcap-devel libnl3 libnl3-devel \
   python3-docutils elfutils-libelf-devel pkgconf-pkg-config \
-  zlib-devel cmake ninja-build tar gzip xz \
-  qt6-qtbase-devel qt6-qtwebengine-devel qt6-qtpositioning-devel \
-  qt6-qttools-devel libX11-devel
+  zlib-devel ninja-build tar gzip xz
 
 # =============================================================================
 # Browser policies and configuration
 # =============================================================================
 echo "--- Configuring browser policies ---"
-
-# Firefox: enable VA-API and WebRender
-install -d -m 0755 /usr/lib64/firefox/distribution
-cat >/usr/lib64/firefox/distribution/policies.json <<'JSON'
-{
-  "policies": {
-    "Preferences": {
-      "media.ffmpeg.vaapi.enabled": { "Value": true, "Status": "default" },
-      "media.hardware-video-decoding.force-enabled": { "Value": true, "Status": "default" },
-      "gfx.webrender.all": { "Value": true, "Status": "default" },
-      "spellchecker.dictionary": { "Value": "en-US,ar", "Status": "default" }
-    }
-  }
-}
-JSON
-if [[ -d /usr/lib/firefox/distribution ]]; then
-  cp /usr/lib64/firefox/distribution/policies.json /usr/lib/firefox/distribution/policies.json || true
-fi
 
 # Chromium-family browsers (Chromium, Helium, Brave Origin): enforce VA-API
 # hardware video decode. Chromium disables VA-API on NVIDIA GPUs by default
@@ -505,11 +476,11 @@ DXVK_STATE_CACHE_PATH=${XDG_CACHE_HOME}/dxvk-cache
 # Qt disk shader cache (smoother desktop and application launches)
 QSG_DISK_CACHE=1
 
-# NVIDIA shader disk cache: raise the 256 MiB default cap to 1 GiB and skip
+# NVIDIA shader disk cache: raise the 256 MiB default cap to 100 GiB and skip
 # the periodic cleanup pass (both prevent shader recompilation stutter in
 # large titles; a cap keeps the cache bounded).
 __GL_SHADER_DISK_CACHE=1
-__GL_SHADER_DISK_CACHE_SIZE=1073741824
+__GL_SHADER_DISK_CACHE_SIZE=107374182400
 __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
 
 # Mutter MR !3797: enable tearing/async page-flip support (custom build)
