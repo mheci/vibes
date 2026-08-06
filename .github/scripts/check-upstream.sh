@@ -142,9 +142,19 @@ check_url "https://github.com/NVIDIA/open-gpu-kernel-modules/releases/latest"
 check_url "https://github.com/sched-ext/scx/tags.atom"
 
 echo
+echo "== Element Desktop download channel =="
+check_url "https://packages.element.io/desktop/install/linux/glibc-x86-64/element-desktop.tar.gz"
+check_url "https://gitlab.gnome.org/GNOME/gnome-boxes/-/raw/main/meson.build"
+
+echo
 echo "== Latest-release asset patterns used by scripts =="
 latest_asset_matches "anomalyco/opencode" "opencode-desktop-linux-x86_64\\.rpm$" "opencode desktop RPM"
+latest_asset_matches "Foundry376/Mailspring" "mailspring-.*\\.x86_64\\.rpm$" "mailspring"
+latest_asset_matches "ferdium/ferdium-app" "Ferdium-linux-.*-x86_64\\.rpm$" "ferdium"
 latest_asset_matches "vicinaehq/vicinae" "Vicinae-x86_64\\.AppImage$" "vicinae launcher"
+latest_asset_matches "vicinaehq/gnome-extension" "vicinae@dagimg-dot\\.shell-extension-.*\\.zip$" "vicinae gnome extension"
+latest_asset_matches "zellij-org/zellij" "zellij-x86_64-unknown-linux-musl\\.tar\\.gz$" "zellij"
+latest_asset_matches "glanceapp/glance" "glance-linux-amd64\\.tar\\.gz$" "glance"
 latest_asset_matches "autobrr/qui" "linux_x86_64\\.tar\\.gz$" "qui"
 latest_asset_matches "pingdotgg/t3code" "T3-Code-[0-9.]+-x86_64\\.AppImage$" "t3code editor"
 latest_asset_matches "oven-sh/bun" "bun-linux-x64\\.zip$" "bun runtime"

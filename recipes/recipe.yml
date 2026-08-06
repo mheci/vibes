@@ -34,7 +34,15 @@ modules:
 
   - type: script
     scripts:
+      - build-gnome-boxes.sh
+
+  - type: script
+    scripts:
       - install-latest-apps.sh
+
+  - type: script
+    scripts:
+      - strip-build-tools.sh
 
   - type: files
     files:
@@ -95,6 +103,9 @@ modules:
           - io.github.wartybix.Constrict
           # RustConn: GTK4 SSH/RDP connection manager (developer recommends Flatpak)
           - io.github.totoshko88.RustConn
+          # Memento: movie watchlist and play tracker (no native package
+          # exists; the developer ships it on Flathub)
+          - io.github.ans_ibrahim.Memento
 
   # GSConnect is intentionally installed from the system package below
   # (gnome-shell-extension-gsconnect): the gnome-extensions module cannot

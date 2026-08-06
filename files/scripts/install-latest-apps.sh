@@ -133,18 +133,11 @@ install_latest_rpm "anomalyco/opencode" 'opencode-desktop-linux-x86_64\.rpm$' "o
 install_latest_rpm "Foundry376/Mailspring" 'mailspring-.*\.x86_64\.rpm$' "mailspring"
 
 # ---------------------------------------------------------------------------
-# Whatsie: native Qt6 WhatsApp desktop client (built from source; upstream
-# migrated from a Makefile to CMake with a bundled libnotify-qt submodule).
+# Ferdium: all-in-one messaging client (WhatsApp, Telegram, Slack, ...).
+# Installed from the official upstream RPM published on GitHub Releases
+# (latest stable), resolving dependencies through DNF.
 # ---------------------------------------------------------------------------
-echo "Building and installing Whatsie..."
-rm -rf /tmp/whatsie
-git clone --depth 1 --recurse-submodules \
-  https://github.com/keshavbhatt/whatsie.git /tmp/whatsie
-cmake -B /tmp/whatsie/build -S /tmp/whatsie -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/usr
-cmake --build /tmp/whatsie/build -j"$(nproc)"
-cmake --install /tmp/whatsie/build
-rm -rf /tmp/whatsie
+install_latest_rpm "ferdium/ferdium-app" 'Ferdium-linux-.*-x86_64\.rpm$' "ferdium"
 
 # ---------------------------------------------------------------------------
 # proton-cachyos (Wayland-first Proton fork, system-wide for Steam)
@@ -437,74 +430,12 @@ rm -rf /tmp/prelockd
 # NOTE on package policy: this image NEVER installs applications via coding
 # language package managers (pip, uv, npm, cargo, go, ...). The package
 # managers themselves are installed (from Fedora RPMs / upstream release
-# binaries), but end-user tools/agents must ship via Fedora repos,
-# GitLab/GitHub RPMs, or direct release artifacts, with Flatpak as the last
-# resort. UnSloth (pip-only) and Pi (npm-only) are therefore not baked in;
-# users can add them at runtime with their own tooling if desired.
+# binaries), but end-user tools must ship via Fedora repos, GitLab/GitHub
+# RPMs, or direct release artifacts, with Flatpak as the very last resort.
+# Software that only exists in a language package manager (npm, uv/pip,
+# crates.io, ...) is left out of the image entirely; users can add it at
+# runtime with their own tooling if they want it.
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Hermes Agent (Nous Research) - system-wide AI agent
-#
-# No official Fedora RPM / Flatpak / AppImage exists; the supported upstream
-# install path is the official install.sh, which for root-on-Linux uses an
-# FHS layout (code /usr/local/lib/hermes-agent, command shim in
-# /usr/local/bin, data in $HERMES_HOME). Package policy requires pinned
-# sources for VCS installs, so we run the official installer with --commit
-# pinning the checkout to an exact upstream SHA (recorded afterwards in
-# $INSTALL_DIR/.hermes-bootstrap-complete). Verified against upstream
-# install.sh; the stages it performs:
-#   repository  - git clone https://github.com/NousResearch/hermes-agent,
-#                 checked out --detach at the pinned commit
-#   venv        - uv venv venv --python 3.11            ($INSTALL_DIR/venv)
-#   python-deps - UV_PROJECT_ENVIRONMENT=$INSTALL_DIR/venv uv sync
-#                 --extra all --locked (fallback: uv pip install -e ".[all]")
-#   node-deps   - npm install (root workspace + ui-tui) + npx playwright
-#                 install chromium (browser tools)
-#   path        - /usr/local/bin/{hermes,hermes-agent,hermes-acp} shims
-#                 exec'ing the venv python with the checkout entrypoints
-#   config      - seeds $HERMES_HOME with .env, config.yaml, SOUL.md, skills
-#
-# --skip-setup --non-interactive make the build deterministic: the setup
-# wizard and gateway stages need a TTY or API keys and are skipped.
-# PLAYWRIGHT_BROWSERS_PATH redirects the bundled Chromium into a shared
-# read-only image path so every user finds it instead of downloading a
-# per-home copy. The seeded $HERMES_HOME is then copied into /etc/skel/.hermes
-# so new users get the same defaults on first login.
-# ---------------------------------------------------------------------------
-echo "Installing Hermes Agent (Nous Research)..."
-HERMES_PIN="f40fbcf40917fbdd1b5918b15eaa80baf5c85e1a"
-retry curl -fsSL https://hermes-agent.nousresearch.com/install.sh \
-  -o /tmp/hermes-install.sh
-PLAYWRIGHT_BROWSERS_PATH=/usr/share/hermes/ms-playwright \
-  bash /tmp/hermes-install.sh \
-    --commit "${HERMES_PIN}" \
-    --skip-setup \
-    --non-interactive
-rm -f /tmp/hermes-install.sh
-if [[ ! -x /usr/local/bin/hermes ]]; then
-  echo "ERROR: Hermes Agent install did not produce /usr/local/bin/hermes" >&2
-  exit 1
-fi
-
-# Seed /etc/skel/.hermes with the default config from the root install.
-# Deliberately excludes the managed uv/node trees and runtime state dirs
-# (recreated on first run) so new homes stay lean.
-install -d -m 0700 /etc/skel/.hermes
-for hermes_state_dir in cron sessions logs pairing hooks image_cache \
-    audio_cache memories skills; do
-  install -d -m 0700 "/etc/skel/.hermes/${hermes_state_dir}"
-done
-install -m 0600 /root/.hermes/.env /etc/skel/.hermes/.env
-install -m 0644 /root/.hermes/config.yaml /etc/skel/.hermes/config.yaml 2>/dev/null || true
-install -m 0644 /root/.hermes/SOUL.md /etc/skel/.hermes/SOUL.md 2>/dev/null || true
-cp -a /root/.hermes/skills/. /etc/skel/.hermes/skills/ 2>/dev/null || true
-{
-  echo ""
-  echo "# Hermes Agent: shared Playwright Chromium in the read-only image path."
-  echo "PLAYWRIGHT_BROWSERS_PATH=/usr/share/hermes/ms-playwright"
-} >>/etc/skel/.hermes/.env
-chmod 0600 /etc/skel/.hermes/.env
 
 # ---------------------------------------------------------------------------
 # qui (qBittorrent web UI, single binary from GitHub)
@@ -707,6 +638,128 @@ install -Dm755 "${deno_bin}" /usr/local/bin/deno
 rm -rf /tmp/deno-x /tmp/deno.zip
 
 # ---------------------------------------------------------------------------
+# zellij (terminal workspace, single static binary from GitHub)
+# ---------------------------------------------------------------------------
+echo "Installing zellij..."
+retry curl -fL --retry 4 --retry-delay 10 -o /tmp/zellij.tar.gz \
+  "$(gh_latest_asset_url "zellij-org/zellij" 'zellij-x86_64-unknown-linux-musl\.tar\.gz$')"
+rm -rf /tmp/zellij-x
+mkdir -p /tmp/zellij-x
+tar -xzf /tmp/zellij.tar.gz -C /tmp/zellij-x
+zellij_bin="$(find /tmp/zellij-x -type f -name zellij -perm -111 | head -n1)"
+if [[ -z "${zellij_bin}" ]]; then
+  echo "ERROR: zellij binary not found in release tarball" >&2
+  exit 1
+fi
+install -Dm755 "${zellij_bin}" /usr/local/bin/zellij
+rm -rf /tmp/zellij-x /tmp/zellij.tar.gz
+
+# ---------------------------------------------------------------------------
+# glance (self-hosted dashboard, single static binary from GitHub)
+# ---------------------------------------------------------------------------
+echo "Installing glance..."
+retry curl -fL --retry 4 --retry-delay 10 -o /tmp/glance.tar.gz \
+  "$(gh_latest_asset_url "glanceapp/glance" 'glance-linux-amd64\.tar\.gz$')"
+rm -rf /tmp/glance-x
+mkdir -p /tmp/glance-x
+tar -xzf /tmp/glance.tar.gz -C /tmp/glance-x
+glance_bin="$(find /tmp/glance-x -type f -name glance -perm -111 | head -n1)"
+if [[ -z "${glance_bin}" ]]; then
+  echo "ERROR: glance binary not found in release tarball" >&2
+  exit 1
+fi
+install -Dm755 "${glance_bin}" /usr/local/bin/glance
+rm -rf /tmp/glance-x /tmp/glance.tar.gz
+
+# ---------------------------------------------------------------------------
+# Element Desktop (Matrix client). The desktop app source lives in
+# element-hq/element-web (apps/desktop); upstream publishes the current
+# build as a portable tarball at packages.element.io (the "element-desktop"
+# name is a rolling pointer to the newest release, currently 1.12.x).
+# Extracted to /usr/lib/element-desktop and wired into the menu.
+# ---------------------------------------------------------------------------
+echo "Installing Element Desktop..."
+ELEMENT_URL="https://packages.element.io/desktop/install/linux/glibc-x86-64/element-desktop.tar.gz"
+rm -rf /tmp/element-desktop /tmp/element-extract
+retry curl -fL --retry 4 --retry-delay 10 -o /tmp/element-desktop.tar.gz "${ELEMENT_URL}"
+mkdir -p /tmp/element-extract
+tar -xzf /tmp/element-desktop.tar.gz -C /tmp/element-extract --strip-components=1
+element_bin="$(find /tmp/element-extract -type f -name element-desktop -perm -111 | head -n1)"
+if [[ -z "${element_bin}" ]]; then
+  echo "ERROR: element-desktop binary not found in tarball" >&2
+  exit 1
+fi
+install -d -m 0755 /usr/lib/element-desktop
+cp -a /tmp/element-extract/. /usr/lib/element-desktop/
+ln -sf /usr/lib/element-desktop/element-desktop /usr/bin/element-desktop
+cat >/usr/share/applications/element-desktop.desktop <<'ELEMENTDESKTOP'
+[Desktop Entry]
+Name=Element
+Comment=Secure messaging and collaboration with Matrix
+Exec=/usr/bin/element-desktop %U
+Terminal=false
+Type=Application
+Categories=Network;InstantMessaging;Chat;
+MimeType=x-scheme-handler/element;
+StartupNotify=true
+ELEMENTDESKTOP
+element_icon="$(find /usr/lib/element-desktop -type f -name 'icon.png' | head -n1)"
+if [[ -n "${element_icon}" ]]; then
+  install -d -m 0755 /usr/share/icons/hicolor/512x512/apps
+  install -m 0644 "${element_icon}" /usr/share/icons/hicolor/512x512/apps/element-desktop.png
+fi
+rm -rf /tmp/element-desktop /tmp/element-extract /tmp/element-desktop.tar.gz
+
+# ---------------------------------------------------------------------------
+# Vicinae GNOME extension (clipboard and window-management APIs for the
+# Vicinae launcher): latest release from GitHub, installed system-wide so
+# every user gets it. The extension declares GNOME Shell 46-50; this image
+# tracks Fedora 44 (GNOME 51), so the shell-version list is extended after
+# extraction to keep the extension active instead of disabled.
+# ---------------------------------------------------------------------------
+echo "Installing Vicinae GNOME extension..."
+VICINAE_EXT_UUID="vicinae@dagimg-dot"
+VICINAE_EXT_DIR="/usr/share/gnome-shell/extensions/${VICINAE_EXT_UUID}"
+VICINAE_EXT_URL="$(gh_latest_asset_url "vicinaehq/gnome-extension" \
+  "vicinae@dagimg-dot\.shell-extension-.*\.zip$")"
+rm -rf /tmp/vicinae-ext /tmp/vicinae-ext.zip
+retry curl -fL --retry 4 --retry-delay 10 -o /tmp/vicinae-ext.zip "${VICINAE_EXT_URL}"
+mkdir -p /tmp/vicinae-ext
+unzip -q /tmp/vicinae-ext.zip -d /tmp/vicinae-ext
+if [[ ! -f /tmp/vicinae-ext/metadata.json ]]; then
+  echo "ERROR: Vicinae extension zip has no metadata.json" >&2
+  exit 1
+fi
+install -d -m 0755 /usr/share/gnome-shell/extensions
+rm -rf "${VICINAE_EXT_DIR}"
+install -m 0755 -d "${VICINAE_EXT_DIR}"
+cp -a /tmp/vicinae-ext/. "${VICINAE_EXT_DIR}/"
+if [[ -f "${VICINAE_EXT_DIR}/metadata.json" ]]; then
+  python3 - "${VICINAE_EXT_DIR}/metadata.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as fh:
+    meta = json.load(fh)
+shell = list(meta.get("shell-version", []))
+for ver in ("51", "52"):
+    if ver not in shell:
+        shell.append(ver)
+meta["shell-version"] = shell
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(meta, fh, indent=2)
+    fh.write("\n")
+PY
+fi
+if [[ -d "${VICINAE_EXT_DIR}/schemas" ]]; then
+  for schema in "${VICINAE_EXT_DIR}"/schemas/*.gschema.xml; do
+    [[ -f "${schema}" ]] && install -m 0644 "${schema}" \
+      /usr/share/glib-2.0/schemas/
+  done
+  glib-compile-schemas /usr/share/glib-2.0/schemas 2>/dev/null || true
+fi
+rm -rf /tmp/vicinae-ext /tmp/vicinae-ext.zip
+
+# ---------------------------------------------------------------------------
 # GitHub-release fonts (not packaged in Fedora)
 # ---------------------------------------------------------------------------
 install_github_fonts() {
@@ -779,7 +832,7 @@ check_command yazi
 check_command mpv
 check_command gnome-tweaks
 check_command mailspring
-check_command whatsie
+check_command ferdium
 check_command brave-origin
 check_command steam
 check_command gamescope
@@ -882,39 +935,19 @@ fi
 check_file /etc/systemd/system/vibes-selinux.service
 check_file /etc/systemd/system/multi-user.target.wants/vibes-selinux.service
 
-# New cloud-native / dev tooling (PR #46 follow-up)
+# New cloud-native / dev tooling
 for cmd in uv hx yt-dlp gh zoxide bun deno t3code; do
   check_command "$cmd"
 done
 
-# Hermes Agent (Nous Research): FHS install with pinned checkout. The
-# /etc/skel copy must be present so every new user gets working defaults.
-check_command hermes
-check_command hermes-agent
-check_command hermes-acp
-check_file /usr/local/lib/hermes-agent/.hermes-bootstrap-complete
-if grep -q "${HERMES_PIN}" \
-    /usr/local/lib/hermes-agent/.hermes-bootstrap-complete 2>/dev/null; then
-  echo "  OK: hermes pinned to ${HERMES_PIN}"
-else
-  echo "  FAIL: hermes not pinned to ${HERMES_PIN}" >&2
-  errors=$((errors + 1))
-fi
-check_file /etc/skel/.hermes/config.yaml
-check_file /etc/skel/.hermes/SOUL.md
-if grep -q '^PLAYWRIGHT_BROWSERS_PATH=/usr/share/hermes/ms-playwright$' \
-    /etc/skel/.hermes/.env 2>/dev/null; then
-  echo "  OK: shared Playwright Chromium path in /etc/skel/.hermes/.env"
-else
-  echo "  FAIL: PLAYWRIGHT_BROWSERS_PATH missing in skel .env" >&2
-  errors=$((errors + 1))
-fi
-if find /usr/share/hermes/ms-playwright -maxdepth 4 -type f -name chrome \
-    2>/dev/null | grep -q .; then
-  echo "  OK: shared Playwright Chromium"
-else
-  echo "  WARN: shared Playwright Chromium missing (browser tools limited)" >&2
-fi
+# Terminal tooling, media apps and utilities added to the image.
+for cmd in tmux zellij lollypop rhythmbox fragments trivy \
+    element-desktop glance; do
+  check_command "$cmd"
+done
+
+# Vicinae GNOME extension installed system-wide.
+check_file /usr/share/gnome-shell/extensions/vicinae@dagimg-dot/metadata.json
 
 if rpm -q sudo-rs >/dev/null 2>&1; then
   echo "  OK: sudo-rs (rpm)"
@@ -1013,12 +1046,6 @@ for cmd in lact lmstudio vicinae ananicy-cpp qui helium zen \
     echo "  SKIP (optional): $cmd"
   fi
 done
-
-if python3 -c "import unsloth" 2>/dev/null; then
-  echo "  OK: unsloth (Python)"
-else
-  echo "  SKIP (optional): unsloth (Python)"
-fi
 
 if [[ $errors -gt 0 ]]; then
   echo "ERROR: ${errors} smoke check(s) failed" >&2
