@@ -71,16 +71,19 @@ jobs:
         run: |
           set -euo pipefail
           # The official isotovideo container runs os-autoinst against the
-          # disk image with the qemu backend. qemu_no_kvm=1 forces TCG
-          # (GitHub runners have no /dev/kvm). The tests in openqa/ use
-          # wait_serial, which reads the serial0 log the qemu backend
-          # always produces, so no needles are involved.
+          # disk image with the qemu backend. GitHub runners have no
+          # /dev/kvm, so TCG is forced explicitly (QEMU_EXTRA_ARGS sets the
+          # machine accelerator; qemu_no_kvm alone still lets qemu-kvm
+          # probe KVM first). The tests in openqa/ use wait_serial, which
+          # reads the serial0 log the qemu backend always produces.
+          mkdir -p openqa/output
           podman run --rm \
             -v "$(pwd)/openqa:/tests:Z" \
             -v "$(pwd)/output:/img:Z" \
             registry.opensuse.org/devel/openqa/containers/isotovideo:qemu-x86 \
             --exit-status-from-test-results \
             qemu_no_kvm=1 \
+            QEMU_EXTRA_ARGS="-machine accel=tcg" \
             casedir=/tests \
             OUTPUTDIR=/tests/output \
             HDD_1=/img/vibes.raw \

@@ -16,8 +16,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   PowerDevil on the performance profile, Breeze Dark with the Inter font.
 - Automatic upgrades and automatic updates are disabled. A weekly check
   (Monday 09:00) only notifies the user when an OS update is available.
-- sched-ext, scx-loader, GNOME Boxes and the ananicy rules are pinned to
-  their latest upstream release tags instead of HEAD builds.
+- sched-ext and scx-loader are built from their master branches again
+  (the newest schedulers and tools, including scxtui).
+- GNOME Boxes and the ananicy rules are pinned to their latest upstream
+  release tags instead of HEAD builds.
+- A system-wide fontconfig profile renders text with full hinting and LCD
+  subpixel filtering for sharp, clear glyphs on 1080p and 1440p displays.
+- The OpenQA test forces TCG up front and allows more boot time.
 - Images are verified against the embedded cosign public key before an
   upgrade is applied, and UKI generation is supported.
 - Third-party GitHub Actions are pinned to immutable commit SHAs.
