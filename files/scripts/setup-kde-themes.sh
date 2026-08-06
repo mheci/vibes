@@ -77,15 +77,6 @@ install_kde_theme_repo "scratchy" \
   "https://gitlab.com/jomada/Scratchy.git" \
   "9eb375276ef5e4dedc42ac0f76f12e63455785b5"
 
-install_kde_theme_repo "darkly" \
-  "https://github.com/Bali10050/Darkly.git" \
-  "11c27e2d98025f4d4c1598f07a185280b36f35f7"
-if [[ -d /tmp/theme-darkly/desktoptheme ]]; then
-  install -d -m 0755 /usr/share/plasma/desktoptheme/Darkly
-  cp -a /tmp/theme-darkly/desktoptheme/. /usr/share/plasma/desktoptheme/Darkly/
-fi
-rm -rf /tmp/theme-darkly
-
 install_kde_theme_repo "graphite" \
   "https://github.com/vinceliuice/Graphite-kde-theme.git" \
   "09665ba967475da01ad9ec2a5a5822f15ba14e84"
@@ -97,6 +88,19 @@ install_kde_theme_repo "whitesur" \
 install_kde_theme_repo "mcmojave" \
   "https://github.com/vinceliuice/McMojave-kde.git" \
   "a1745e9c35d57c6db7e298180dba53ac4a70fee9"
+
+echo "--- Darkly (desktop theme, colors, decoration) ---"
+DARKLY_DIR="/tmp/theme-darkly"
+clone_pinned "https://github.com/Bali10050/Darkly.git" \
+  "11c27e2d98025f4d4c1598f07a185280b36f35f7" "${DARKLY_DIR}"
+copy_if_exists "${DARKLY_DIR}/colors" /usr/share/color-schemes
+copy_if_exists "${DARKLY_DIR}/kdecoration" /usr/share/aurorae/themes
+if [[ -d "${DARKLY_DIR}/desktoptheme" ]]; then
+  install -d -m 0755 /usr/share/plasma/desktoptheme/Darkly
+  cp -a "${DARKLY_DIR}/desktoptheme/." /usr/share/plasma/desktoptheme/Darkly/
+  echo "  installed Darkly desktop theme"
+fi
+rm -rf "${DARKLY_DIR}"
 
 echo "--- BonaFides Plasma Themes ---"
 BONA_DIR="/tmp/theme-bonafides"
@@ -126,8 +130,9 @@ SOUND_DIR="/tmp/theme-sounds"
 clone_pinned "https://github.com/gxanshu/macos-bigsur-sound-theme-linux.git" \
   "88275891dc8ce9c14f69431eddbb3d04d5069e53" "${SOUND_DIR}"
 install -d -m 0755 /usr/share/sounds/macOS-BigSur
-if [[ -d "${SOUND_DIR}/sounds/bigsur" ]]; then
-  cp -a "${SOUND_DIR}/sounds/bigsur/." /usr/share/sounds/macOS-BigSur/
+if [[ -d "${SOUND_DIR}/theme/bigsur" ]]; then
+  cp -a "${SOUND_DIR}/theme/bigsur/." /usr/share/sounds/macOS-BigSur/
+  echo "  installed macOS Big Sur sound scheme"
 else
   cp -a "${SOUND_DIR}/sounds/." /usr/share/sounds/macOS-BigSur/
 fi
