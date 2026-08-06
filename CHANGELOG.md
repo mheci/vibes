@@ -22,9 +22,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   release tags instead of HEAD builds.
 - A system-wide fontconfig profile renders text with full hinting and LCD
   subpixel filtering for sharp, clear glyphs on 1080p and 1440p displays.
-- The `vjust` command runner gains one-command switches between the
-  scx_cake, scx_cosmos and scx_lavd schedulers, each with the optimal
-  extreme-gaming performance flags.
+- `vjust steam-dev-cfg` writes the Steam development config
+  (unShaderBackgroundProcessingThreads 16 and
+  @nClientDownloadEnableHTTP2PlatformLinux 0) into
+  ~/.steam/steam/steam_dev.cfg; new users get the same defaults from
+  /etc/skel.
+- Gamescope runs with CAP_SYS_NICE applied at build time and reapplied
+  at every boot by a oneshot unit.
 - bottom is installed from its official GitHub release (not packaged in
   Fedora 44).
 - Images are verified against the embedded cosign public key before an
