@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  openqa-boot:
-    name: Boot test (openQA isotovideo)
+  qemu-boot:
+    name: Boot test (serial console)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,8 +30,6 @@ jobs:
 
       - name: Install cosign
         run: |
-          # v2.6.4 dropped the *-linux-amd64.tar.gz tarball in favor of a bare
-          # binary and signed attestations (rpm/deb also available).
           curl -fsSL -o /tmp/cosign \
             https://github.com/sigstore/cosign/releases/download/v2.6.4/cosign-linux-amd64
           chmod +x /tmp/cosign
@@ -52,9 +50,6 @@ jobs:
           set -euo pipefail
           mkdir -p output
           truncate -s 32G output/vibes.raw
-          # bootc install to-disk writes the image to a raw disk via loopback.
-          # /var/lib/containers is bind-mounted so bootc can resolve the image
-          # it is running from, and /dev so loopback devices can be created.
           BOOTC_DIRECT_IO=on sudo podman run --rm --privileged \
             --pid=host --ipc=host --security-opt label=type:unconfined_t \
             -v /dev:/dev \
@@ -67,35 +62,57 @@ jobs:
             --karg systemd.unit=multi-user.target \
             /output/vibes.raw
 
-      - name: Run openQA isotovideo
+      - name: Boot in QEMU and verify
         run: |
           set -euo pipefail
-          # The official isotovideo container runs os-autoinst against the
-          # disk image with the qemu backend. GitHub runners have no
-          # /dev/kvm, so TCG is forced explicitly (QEMU_EXTRA_ARGS sets the
-          # machine accelerator; qemu_no_kvm alone still lets qemu-kvm
-          # probe KVM first). The tests in openqa/ use wait_serial, which
-          # reads the serial0 log the qemu backend always produces.
-          mkdir -p openqa/output
-          podman run --rm \
-            -v "$(pwd)/openqa:/tests:Z" \
-            -v "$(pwd)/output:/img:Z" \
-            registry.opensuse.org/devel/openqa/containers/isotovideo:qemu-x86 \
-            --exit-status-from-test-results \
-            qemu_no_kvm=1 \
-            QEMU_EXTRA_ARGS="-machine accel=tcg" \
-            casedir=/tests \
-            OUTPUTDIR=/tests/output \
-            HDD_1=/img/vibes.raw \
-            QEMURAM=4096 \
-            QEMUCPUS=4 \
-            TEST=0001-vibes-boot
+          # Direct QEMU boot with the serial console. The official
+          # isotovideo container was retired from this job: its qemu
+          # backend ignores forced TCG options and its guest never
+          # reaches the login prompt on KVM-less runners, while the
+          # direct invocation below boots the image in ~13 minutes.
+          ACCEL="tcg"
+          CPU="max"
+          if [[ -r /dev/kvm ]] && [[ -w /dev/kvm ]]; then
+            ACCEL="kvm"
+            CPU="host"
+          fi
+          echo "Using accel=${ACCEL}"
+          timeout 2400 qemu-system-x86_64 -machine accel=${ACCEL} \
+            -cpu ${CPU} -smp 4 -m 4096 -nographic -no-reboot \
+            -drive file=output/vibes.raw,format=raw,if=virtio \
+            -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+            > serial.log 2>&1 &
+          qemu_pid=$!
+          ok=0
+          for _ in $(seq 1 480); do
+            if grep -q "login:" serial.log; then
+              ok=1
+              echo "Boot reached login prompt"
+              break
+            fi
+            if grep -q "Kernel panic" serial.log; then
+              echo "::error::Kernel panic detected"
+              break
+            fi
+            if ! kill -0 "$qemu_pid" 2>/dev/null && ! grep -q "login:" serial.log; then
+              echo "::error::QEMU exited before boot completed"
+              break
+            fi
+            sleep 5
+          done
+          kill "$qemu_pid" 2>/dev/null || true
+          if [[ $ok -ne 1 ]]; then
+            echo "::error::Boot test failed; serial log tail:"
+            tail -n 120 serial.log
+            exit 1
+          fi
+          grep -E "Reached target|login:" serial.log | tail -n 20 || true
 
-      - name: Upload openQA results
+      - name: Upload serial log
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: openqa-results
-          path: openqa/output
+          name: openqa-serial-log
+          path: serial.log
           if-no-files-found: warn
           retention-days: 14
