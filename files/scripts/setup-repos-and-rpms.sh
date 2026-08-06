@@ -109,7 +109,7 @@ LMM
 
 echo "--- Installing power management (tuned + tuned-ppd) ---"
 
-install_available tuned tuned-ppd dconf
+install_available tuned tuned-ppd
 
 install -d -m 0755 /etc/tuned
 cat >/etc/tuned/ppd.conf <<'PPDCONF'
@@ -127,19 +127,6 @@ performance=latency-performance
 balanced=balanced-battery
 PPDCONF
 
-install -d -m 0755 /etc/dconf/db/local.d
-cat >/etc/dconf/db/local.d/02-vibes-power <<'DCONF'
-[org/gnome/settings-daemon/plugins/power]
-power-profile='performance'
-DCONF
-if [[ ! -f /etc/dconf/profile/user ]]; then
-  echo 'user-db:user' >/etc/dconf/profile/user
-  echo 'system-db:local' >>/etc/dconf/profile/user
-elif ! grep -q 'system-db:local' /etc/dconf/profile/user 2>/dev/null; then
-  echo 'system-db:local' >>/etc/dconf/profile/user
-fi
-dconf update 2>/dev/null || echo "WARN: dconf update failed (GNOME power profile default not compiled)" >&2
-
 echo "--- Installing desktop applications ---"
 
 install_available \
@@ -150,13 +137,10 @@ install_available \
   faugus-launcher \
   tmux lollypop rhythmbox fragments qbittorrent
 
-echo "--- Installing GNOME desktop additions ---"
+echo "--- Installing desktop integration ---"
 
 install_available \
-  mpv gnome-tweaks \
-  libgda libgda-sqlite gsound \
-  gnome-shell-extension-gsconnect nautilus-gsconnect \
-  gnome-menus
+  mpv kdeconnectd
 
 echo "--- Installing chat clients ---"
 
@@ -316,8 +300,6 @@ QSG_DISK_CACHE=1
 __GL_SHADER_DISK_CACHE=1
 __GL_SHADER_DISK_CACHE_SIZE=107374182400
 __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
-
-MUTTER_DEBUG_EXPERIMENTAL_FEATURES=tearing,variable-refresh-rate
 EOFENV
 
 echo "--- Configuring system services ---"
@@ -435,10 +417,10 @@ echo "--- Verifying firewall policy ---"
 
 if [[ -f /usr/lib/firewalld/zones/FedoraWorkstation.xml ]] \
   && grep -q '1025-65535' /usr/lib/firewalld/zones/FedoraWorkstation.xml; then
-  echo "OK: FedoraWorkstation zone opens 1025-65535 (Steam/GSConnect/torrents/media pass)"
+  echo "OK: FedoraWorkstation zone opens 1025-65535 (Steam/KDE Connect/torrents/media pass)"
 else
   echo "WARN: FedoraWorkstation zone with 1025-65535 not found; verify the firewall" >&2
-  echo "      does not block Steam, GSConnect, torrents or media servers" >&2
+  echo "      does not block Steam, KDE Connect, torrents or media servers" >&2
 fi
 
 echo "--- Cleaning up ---"

@@ -2,12 +2,12 @@
 
 <p align="center"><img src="assets/vibes-mascot.svg" width="160" alt="Vibes mascot"></p>
 
-Vibes is a GNOME workstation image for NVIDIA hardware. It layers the
+Vibes is a KDE Plasma workstation image for NVIDIA hardware. It layers the
 CachyOS BORE kernel with in-image NVIDIA driver builds, a curated toolset and
-quiet system tuning onto Bluefin, and publishes signed, chunked images that
+quiet system tuning onto Aurora, and publishes signed, chunked images that
 update quickly.
 
-**Base image:** `ghcr.io/ublue-os/bluefin-nvidia-open:latest`
+**Base image:** `ghcr.io/ublue-os/aurora-nvidia-open:stable`
 **Output image:** `ghcr.io/mheci/vibes:latest`
 
 [![build](https://github.com/mheci/vibes/actions/workflows/build.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/build.yml)
@@ -23,13 +23,13 @@ update quickly.
 | Area | What the image ships |
 | --- | --- |
 | Kernel | CachyOS BORE kernel (COPR), NVIDIA open modules rebuilt in the image, stock kernel removed and version-locked, initramfs generated for the new kernel |
-| Graphics | Custom mutter build with tearing and variable refresh rate, 100 GiB shader cache, Wayland and VA-API defaults |
+| Graphics | KDE Plasma on the NVIDIA stack, 100 GiB shader cache, Wayland and VA-API defaults |
 | Gaming | Steam, Gamescope, MangoHud, proton-cachyos (sha512 verified), Faugus Launcher, LACT, sched-ext schedulers, ananicy-cpp with the CachyOS ruleset |
 | Browsers | Zen Browser, Brave Origin, Helium, with hardware video decoding configured |
-| Messaging | Ferdium (WhatsApp, Telegram, Slack and more), Commet for Matrix, karere, Mailspring, Nicotine+, GSConnect |
+| Messaging | Ferdium (WhatsApp, Telegram, Slack and more), Commet for Matrix, karere, Mailspring, Nicotine+, KDE Connect |
 | Media | Lollypop, Rhythmbox, Fragments, Memento, qBittorrent with the qui web UI, mpv with hardware decode, full ffmpeg and GStreamer codec stack |
 | Development | Zed, VS Code, opencode, T3 Code, Helix, Nix (persistent `/var/nix`), uv, Bun, Deno, Node.js, GitHub CLI, yt-dlp, tmux, zellij |
-| AI | LM Studio, Vicinae launcher with its GNOME extension |
+| AI | LM Studio, Vicinae launcher |
 | Virtualization | GNOME Boxes built from the newest upstream source, Pods, DistroShelf, Lobjur (Lobsters and Hacker News client), RustConn |
 | Security | cosign signing, Trivy scanning, sudo-rs, SELinux gaming tuning, GitHub Actions pinned to exact versions |
 | System | PipeWire tuned for voice and gaming, uresourced, nohang, prelockd, tuned with latency-performance, BBR networking, `vjust` command recipes |
@@ -85,7 +85,7 @@ attaches an SPDX SBOM.
 | Stage | Description |
 | --- | --- |
 | Validate | shellcheck, actionlint, yamllint, markdownlint and recipe checks |
-| Build | BlueBuild layers repositories, RPMs, themes, upstream binaries and system configs onto Bluefin NVIDIA Open, then re-chunks the image into balanced OCI layers |
+| Build | BlueBuild layers repositories, RPMs, themes, upstream binaries and system configs onto Aurora NVIDIA Open, then re-chunks the image into balanced OCI layers |
 | Lint | `bootc container lint` runs inside the recipe |
 | Sign | Image signed with a cosign private key stored in GitHub Secrets |
 | Scan | Trivy scans the repository on every push and the published image weekly |

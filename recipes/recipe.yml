@@ -2,10 +2,10 @@
 # yaml-language-server: $schema=https://schema.blue-build.org/recipe-v1.json
 version: 1
 name: vibes
-description: Bluefin NVIDIA Open GNOME workstation image built with BlueBuild.
+description: Aurora NVIDIA Open KDE workstation image built with BlueBuild.
 
-base-image: ghcr.io/ublue-os/bluefin-nvidia-open
-image-version: latest
+base-image: ghcr.io/ublue-os/aurora-nvidia-open
+image-version: stable
 
 modules:
   - type: script
@@ -22,15 +22,7 @@ modules:
 
   - type: script
     scripts:
-      - setup-gnome-theming.sh
-
-  - type: script
-    scripts:
       - install-themes.sh
-
-  - type: script
-    scripts:
-      - build-mutter-tearing.sh
 
   - type: script
     scripts:
@@ -52,12 +44,10 @@ modules:
   - type: default-flatpaks
     configurations:
       - install:
-          # Bazaar: modern GNOME app store (also shipped by the Bluefin base)
+          # Bazaar: modern app store
           - io.github.kolunmi.Bazaar
           # FlameGet: GTK4 download manager (aria2/cURL/yt-dlp wrapper)
           - io.github.C_Yassin.FlameGet
-          # Refine: discover advanced and experimental GNOME settings
-          - page.tesk.Refine
           # Warehouse: Flatpak manager and cleaner
           - io.github.flattool.Warehouse
           # coppwr: PipeWire graph inspection and control
@@ -85,8 +75,6 @@ modules:
           - com.usebottles.bottles
           # Flatseal: manage Flatpak permissions
           - com.github.tchx84.Flatseal
-          # Extension Manager: browse and manage GNOME Shell extensions
-          - com.mattjakeman.ExtensionManager
           # ProtonPlus: Proton and Wine-GE version manager for gaming
           - com.vysp3r.ProtonPlus
           # Foliate: modern ebook reader
@@ -97,8 +85,6 @@ modules:
           - io.ente.auth
           # Ignition: manage Flatpak remotes and files
           - io.github.flattool.Ignition
-          # LibreMenu Editor: build custom menu layouts for GNOME Shell
-          - page.codeberg.libre_menu_editor.LibreMenuEditor
           # Constrict: GTK4 audio recording app for podcasts
           - io.github.wartybix.Constrict
           # RustConn: GTK4 SSH/RDP connection manager (developer recommends Flatpak)
@@ -106,19 +92,6 @@ modules:
           # Memento: movie watchlist and play tracker (no native package
           # exists; the developer ships it on Flathub)
           - io.github.ans_ibrahim.Memento
-
-  # GSConnect is intentionally installed from the system package below
-  # (gnome-shell-extension-gsconnect): the gnome-extensions module cannot
-  # install it because the extension is hard-coded to user/local locations.
-  - type: gnome-extensions
-    install:
-      - Just Perfection
-      - Grand Theft Focus
-      - AppIndicator and KStatusNotifierItem Support
-      - 10070 # ChromaLeon
-      - Alphabetical App Grid
-      - 8834 # Copyous: clipboard history manager with pins, tags and SQLite persistence
-      - 3628 # Arc Menu: alternative application menu for GNOME Shell
 
   - type: kargs
     kargs:
