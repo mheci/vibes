@@ -140,7 +140,8 @@ install_available \
 echo "--- Installing desktop integration ---"
 
 install_available \
-  mpv kdeconnectd libnotify systemd-ukify
+  mpv kdeconnectd libnotify systemd-ukify \
+  nautilus gvfs gvfs-mtp gnome-disk-utility dolphin
 
 echo "--- Installing developer utilities ---"
 

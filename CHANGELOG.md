@@ -29,6 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   /etc/skel.
 - Gamescope runs with CAP_SYS_NICE applied at build time and reapplied
   at every boot by a oneshot unit.
+- KDE theming suite: Valve SteamOS look-and-feel and schemes
+  (steamdeck-kde-presets), Marge, Scratchy, Darkly, Graphite, WhiteSur,
+  McMojave and BonaFides global themes with their color schemes,
+  aurorae, kvantum and konsole profiles, plus the macOS Big Sur sound
+  scheme and Papirus, Tela-circle and WhiteSur icon themes.
+- scx-manager (CachyOS GUI for sched-ext schedulers) built from master.
+- Klassy window decorations and themes built from master.
+- Nautilus with GVFS MTP support, GNOME Disks and Dolphin available as
+  file managers.
 - bottom is installed from its official GitHub release (not packaged in
   Fedora 44).
 - Images are verified against the embedded cosign public key before an

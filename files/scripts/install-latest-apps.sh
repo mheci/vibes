@@ -756,6 +756,16 @@ for cmd in tmux zellij lollypop rhythmbox fragments trivy \
   check_command "$cmd"
 done
 
+for cmd in nautilus gnome-disks dolphin; do
+  check_command "$cmd"
+done
+if rpm -q gvfs-mtp >/dev/null 2>&1; then
+  echo "  OK: gvfs-mtp (rpm)"
+else
+  echo "  FAIL: gvfs-mtp not installed" >&2
+  errors=$((errors + 1))
+fi
+
 check_file /etc/ananicy.d/ananicy.conf
 check_file /etc/ananicy.d/00-types.types
 if [[ -d /etc/ananicy.d/00-default ]]; then
