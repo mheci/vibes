@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# Shared library for Vibes BlueBuild image scripts.
-# Source with: source "$(dirname "$0")/lib.sh"
 # shellcheck disable=SC2034
 
 set -euo pipefail
 
-# Determine DNF backend (dnf5 preferred, fallback to dnf)
 if command -v dnf5 >/dev/null 2>&1; then
   DNF=(dnf5 -y)
 else
@@ -13,8 +10,6 @@ else
 fi
 readonly -a DNF
 
-# Retry a command up to N times with exponential backoff.
-# Usage: retry [attempts=4] [delay=10] command [args...]
 retry() {
   local attempts=4 delay=10 n=1
   if [[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]]; then
@@ -37,10 +32,6 @@ retry() {
   done
 }
 
-# Install packages that are available in enabled repositories.
-# Unavailable packages are skipped with a warning.
-# Already-installed packages are skipped to avoid dnf5 "already installed" errors
-# that cause transaction resolution failures (observed in CI logs).
 install_available() {
   local pkgs=("$@") available=() pkg
   for pkg in "${pkgs[@]}"; do
@@ -67,23 +58,13 @@ install_available() {
   fi
 }
 
-# Resolve the download URL for the latest GitHub release asset matching a
-# pattern WITHOUT using the GitHub REST API. Unauthenticated API calls are
-# rate-limited per-IP (60/hr), and GitHub-hosted runners share egress IPs, so
-# api.github.com can 403 mid-build even when no other call was made. This uses
-# the releases/latest redirect + the expanded_assets HTML page instead, and
-# falls back to the API-based gh_asset_url() only if that fails.
 gh_latest_asset_url() {
   local repo="$1" pattern="$2"
   local effective_url="" tag="" html="" url=""
-  # Follow the releases/latest redirect to learn the current tag. -f makes
-  # curl fail on transient HTML errors (503/5xx) so retry() backs off instead
-  # of treating the error page as a successful redirect.
   effective_url="$(retry curl -fsIL -o /dev/null -w '%{url_effective}' \
     -H "User-Agent: vibes-bluebuild" "https://github.com/${repo}/releases/latest")"
   tag="${effective_url##*/releases/tag/}"
   if [[ -n "$tag" && "$tag" != "$effective_url" ]]; then
-    # The expanded_assets page lists download links for one release without API.
     html="$(retry curl -fsL -H "User-Agent: vibes-bluebuild" "https://github.com/${repo}/releases/expanded_assets/${tag}")"
     url="$(echo "$html" | grep -oE 'href="/[^"]+"' | sed 's/^href="//; s/"$//' | grep -E "${pattern}" | head -n1)"
     if [[ -n "$url" ]]; then
@@ -97,8 +78,6 @@ gh_latest_asset_url() {
   gh_asset_url "$repo" "$pattern"
 }
 
-# Fetch the download URL for the latest GitHub release asset matching a pattern.
-# Uses (?i) inline case-insensitive flag for compatibility with jq 1.5+ (avoids test($pattern; "i") which requires jq 1.6+).
 gh_asset_url() {
   local repo="$1" pattern="$2"
   if ! command -v jq >/dev/null 2>&1; then
@@ -113,7 +92,6 @@ gh_asset_url() {
     headers+=(-H "Authorization: Bearer ${GH_TOKEN}")
   fi
   local response="" http_code="" attempt=1 max_attempts=3 delay=5
-  # Retry transient failures (429, 5xx, network errors) with exponential backoff.
   while (( attempt <= max_attempts )); do
     response="$(curl -sSL -w "\n%{http_code}" "${headers[@]}" "$api_url" 2>&1)" || response=""
     if [[ -n "$response" ]]; then
@@ -137,12 +115,10 @@ gh_asset_url() {
     return 1
   fi
   http_code="$(echo "$response" | tail -n1)"
-  # If rate limited (403), provide helpful message
   if [[ "$http_code" == "403" ]]; then
     echo "WARN: GitHub API rate limited (HTTP 403) for ${repo}; token may be missing or exhausted" >&2
   fi
   if [[ "$http_code" -ge 400 ]]; then
-    # Remove last line (http code) to get body for error extraction
     local body
     body="$(echo "$response" | sed '$d')"
     echo "ERROR: GitHub API ${api_url} returned HTTP ${http_code}: ${body:0:500}" >&2
@@ -154,7 +130,6 @@ gh_asset_url() {
     echo "ERROR: failed to fetch release assets for ${repo} (empty assets)" >&2
     return 1
   fi
-  # Use inline (?i) for case-insensitive matching to support jq 1.5+ (test with flags requires 1.6+)
   # shellcheck disable=SC2016
   url="$(echo "$assets_json" | jq -r --arg pattern "(?i)${pattern}" '[.[] | select(.name | test($pattern))] | first | .browser_download_url // empty')"
   if [[ -z "$url" ]]; then
@@ -166,18 +141,14 @@ gh_asset_url() {
   echo "$url"
 }
 
-# Clean build-time artifacts flagged by `bootc container lint`.
-# Preserves /tmp/scripts and /tmp/modules which BlueBuild requires for subsequent modules.
 clean_build_artifacts() {
   "${DNF[@]}" clean all || true
   rm -f /var/log/dnf5.log* /var/log/dnf.librepo.log* /var/log/hawkey.log* \
         /var/cache/ldconfig/aux-cache || true
   rm -rf /var/lib/dnf /var/cache/dnf /run/dnf || true
-  # Clean caches outside of /tmp/scripts and /tmp/modules
   rm -rf /root/.cache/* /root/.npm/* /root/.cargo/* 2>/dev/null || true
   rm -rf /tmp/vibes-* /tmp/bpftune /tmp/zed* /tmp/zen* /tmp/linux-rnnoise* /tmp/qui* /tmp/nohang /tmp/prelockd 2>/dev/null || true
   rm -f /tmp/*.tar.gz /tmp/*.tar.xz /tmp/*.zip /tmp/*.rpm /tmp/opencode-install.sh 2>/dev/null || true
-  # Python and npm cache cleanup (safe, does not touch /tmp/scripts)
   find /usr -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
   pip cache purge 2>/dev/null || true
   npm cache clean --force 2>/dev/null || true

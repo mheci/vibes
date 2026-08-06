@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Install desktop themes, cursor packs, and visual assets.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -8,15 +7,10 @@ source "${SCRIPT_DIR}/lib.sh"
 
 echo "=== Installing Desktop Themes ==="
 
-# Create required directory structure
 mkdir -p \
   /usr/share/themes \
   /usr/share/icons
 
-# ---------------------------------------------------------------------------
-# macOS cursor themes
-# Pinned to v2.0.0 (2024-09-15); update deliberately after testing.
-# ---------------------------------------------------------------------------
 echo "Installing macOS cursor themes..."
 CURSOR_TAG="v2.0.0"
 CURSOR_BASE="https://github.com/ful1e5/apple_cursor/releases/download/${CURSOR_TAG}"
@@ -31,11 +25,6 @@ for theme in macOS-BigSur macOS-Monterey; do
   fi
 done
 
-# ---------------------------------------------------------------------------
-# MoreWaita icon theme (Adwaita companion with icons for third-party apps)
-# Pinned commit; the theme files live at the repository root, and the
-# upstream install.sh copies them system-wide and rebuilds the icon cache.
-# ---------------------------------------------------------------------------
 echo "Installing MoreWaita icon theme..."
 MOREWAITA_PIN="53bc2ba9c2cdc1f26ef822fcdd8a95e01cce5d58"
 rm -rf /tmp/morewaita
