@@ -683,7 +683,7 @@ ELEMENT_URL="https://packages.element.io/desktop/install/linux/glibc-x86-64/elem
 rm -rf /tmp/element-desktop /tmp/element-extract
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/element-desktop.tar.gz "${ELEMENT_URL}"
 mkdir -p /tmp/element-extract
-tar -xzf /tmp/element-desktop.tar.gz -C /tmp/element-extract
+tar -xzf /tmp/element-desktop.tar.gz -C /tmp/element-extract --strip-components=1
 element_bin="$(find /tmp/element-extract -type f -name element-desktop -perm -111 | head -n1)"
 if [[ -z "${element_bin}" ]]; then
   echo "ERROR: element-desktop binary not found in tarball" >&2

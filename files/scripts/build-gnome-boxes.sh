@@ -49,7 +49,7 @@ build_boxes() {
 
   echo "--- Configuring and building ---"
   meson setup "${BUILD_DIR}/build" "${BUILD_DIR}" \
-    --prefix /usr --libdir lib64 --buildtype release -Dtests=disabled
+    --prefix /usr --libdir lib64 --buildtype release -Dinstalled_tests=false
   ninja -C "${BUILD_DIR}/build" || ninja -C "${BUILD_DIR}/build" -j 1
 
   echo "--- Installing ---"
