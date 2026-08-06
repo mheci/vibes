@@ -49,17 +49,14 @@ install_kde_theme_repo() {
 }
 
 install_icon_repo() {
-  local name="$1" url="$2" sha="$3" pattern="$4"
+  local name="$1" url="$2" sha="$3"
   local dir="/tmp/theme-${name}"
   echo "--- ${name} (icons) ---"
   clone_pinned "${url}" "${sha}" "${dir}"
-  for theme_dir in "${dir}"/${pattern}; do
-    if [[ -d "${theme_dir}" ]]; then
-      install -d -m 0755 /usr/share/icons
-      cp -a "${theme_dir}" /usr/share/icons/
-      echo "  installed icon theme $(basename "${theme_dir}")"
-    fi
-  done
+  (
+    cd "${dir}"
+    ./install.sh -d /usr/share/icons ${4:+-t $4}
+  )
   rm -rf "${dir}"
 }
 
@@ -83,6 +80,11 @@ install_kde_theme_repo "scratchy" \
 install_kde_theme_repo "darkly" \
   "https://github.com/Bali10050/Darkly.git" \
   "11c27e2d98025f4d4c1598f07a185280b36f35f7"
+if [[ -d /tmp/theme-darkly/desktoptheme ]]; then
+  install -d -m 0755 /usr/share/plasma/desktoptheme/Darkly
+  cp -a /tmp/theme-darkly/desktoptheme/. /usr/share/plasma/desktoptheme/Darkly/
+fi
+rm -rf /tmp/theme-darkly
 
 install_kde_theme_repo "graphite" \
   "https://github.com/vinceliuice/Graphite-kde-theme.git" \
@@ -113,18 +115,22 @@ rm -rf "${BONA_DIR}"
 
 install_icon_repo "tela-circle" \
   "https://github.com/vinceliuice/Tela-circle-icon-theme.git" \
-  "c0adf1ab92f564e3b83540441921f26d121b09c3" "Tela-circle*"
+  "c0adf1ab92f564e3b83540441921f26d121b09c3"
 
 install_icon_repo "whitesur-icons" \
   "https://github.com/vinceliuice/WhiteSur-icon-theme.git" \
-  "c5c8ee5588cf8640dbe25838fa62b43c81c45a33" "WhiteSur*"
+  "c5c8ee5588cf8640dbe25838fa62b43c81c45a33" "all"
 
 echo "--- macOS Big Sur sound scheme ---"
 SOUND_DIR="/tmp/theme-sounds"
 clone_pinned "https://github.com/gxanshu/macos-bigsur-sound-theme-linux.git" \
   "88275891dc8ce9c14f69431eddbb3d04d5069e53" "${SOUND_DIR}"
 install -d -m 0755 /usr/share/sounds/macOS-BigSur
-cp -a "${SOUND_DIR}/." /usr/share/sounds/macOS-BigSur/
+if [[ -d "${SOUND_DIR}/sounds/bigsur" ]]; then
+  cp -a "${SOUND_DIR}/sounds/bigsur/." /usr/share/sounds/macOS-BigSur/
+else
+  cp -a "${SOUND_DIR}/sounds/." /usr/share/sounds/macOS-BigSur/
+fi
 rm -rf "${SOUND_DIR}"
 
 fc-cache -f >/dev/null 2>&1 || true
@@ -147,10 +153,10 @@ check_theme_path /usr/share/plasma/look-and-feel/com.valve.vapor.deck.desktop
 check_theme_path /usr/share/plasma/desktoptheme/Vapor
 check_theme_path /usr/share/plasma/look-and-feel/Marge
 check_theme_path /usr/share/plasma/look-and-feel/Scratchy
-check_theme_path /usr/share/plasma/look-and-feel/Darkly
-check_theme_path /usr/share/plasma/look-and-feel/Graphite
-check_theme_path /usr/share/plasma/look-and-feel/WhiteSur
-check_theme_path /usr/share/plasma/look-and-feel/McMojave
+check_theme_path /usr/share/plasma/desktoptheme/Darkly
+check_theme_path /usr/share/plasma/desktoptheme/Graphite
+check_theme_path /usr/share/plasma/desktoptheme/WhiteSur
+check_theme_path /usr/share/plasma/desktoptheme/McMojave
 check_theme_path /usr/share/color-schemes
 if find /usr/share/color-schemes -maxdepth 1 -name '*.colors' | grep -q .; then
   echo "  OK: color schemes present"
