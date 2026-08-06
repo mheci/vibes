@@ -52,7 +52,7 @@ echo "--- Installing scx binaries ---"
 find target/release -maxdepth 1 -type f -executable ! -name '*.so' \
   -exec install -Dm755 -t /usr/bin {} +
 
-echo "--- Building scx_loader/scxctl/scxtui (sched-ext/scx-loader) ---"
+echo "--- Building scx_loader/scxctl (sched-ext/scx-loader) ---"
 
 SCX_LOADER_TAG="v1.1.2"
 SCX_LOADER_COMMIT=""
@@ -115,7 +115,6 @@ check_scx_command() {
 
 check_scx_command scx_loader
 check_scx_command scxctl
-check_scx_command scxtui
 check_scx_command scx_lavd
 check_scx_command scx_bpfland
 check_scx_command scx_rusty
