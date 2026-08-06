@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# Build and install the latest GNOME Boxes from the upstream trunk
-# (gitlab.gnome.org/GNOME/gnome-boxes, default branch `main`), replacing the
-# Fedora package so the image carries the newest code.
-#
-# If the trunk build fails (e.g. a dependency bump beyond what Fedora 44
-# packages provide), fall back to the Fedora package so the app is still
-# present in the image.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -77,9 +70,6 @@ else
   BOXES_VERSION="fedora"
 fi
 
-# =============================================================================
-# Post-install smoke checks
-# =============================================================================
 echo "=== Running GNOME Boxes smoke checks ==="
 errors=0
 
@@ -111,9 +101,6 @@ if [[ $errors -gt 0 ]]; then
   exit 1
 fi
 
-# =============================================================================
-# Cleanup
-# =============================================================================
 echo "--- Cleaning up ---"
 rm -rf "${BUILD_DIR}"
 clean_build_artifacts

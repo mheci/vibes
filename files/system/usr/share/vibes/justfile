@@ -1,238 +1,179 @@
-# Vibes - command recipes
-# Run with: vjust <recipe>  (or: just --justfile /usr/share/vibes/justfile <recipe>)
 
-# ------------------------------------------------------------------
 [group('System')]
 
-# System overview (kernel, image, versions)
 status:
     uname -r
     cat /usr/share/vibes/kernel-version
     rpm-ostree status
     flatpak --version
 
-# Update the image and Flatpaks
 update:
     bootc upgrade
     flatpak update -y
 
-# Reboot the system
 reboot:
     sudo systemctl reboot
 
-# Power off the system
 poweroff:
     sudo systemctl poweroff
 
-# Recent journal messages from the current boot
 journal:
     journalctl -b -n 100 --no-pager
 
-# Errors and warnings from the current boot
 errors:
     journalctl -b -p 3 --no-pager
 
-# Deployment / rollback status
 boot-status:
     bootc status
 
-# Disk usage of the main filesystems
 disk:
     df -h / /var /boot
 
-# Memory usage (incl. zram/zswap state)
 mem:
     free -h
     zramctl 2>/dev/null || true
 
-# Kernel details
 kernel:
     uname -r
     cat /usr/share/vibes/kernel-version
     ls /usr/lib/modules
 
-# Firmware updates (fwupd)
 firmware:
     sudo fwupdmgr refresh
     sudo fwupdmgr update
 
-# Failed systemd units
 services:
     systemctl list-units --failed --no-pager
 
-# Status of a systemd service
 service-status service:
     systemctl status "{{service}}" --no-pager
 
-# Restart a systemd service
 service-restart service:
     sudo systemctl restart "{{service}}"
 
-# ------------------------------------------------------------------
 [group('TPM')]
 
-# TPM status and enrolled secrets
 tpm-status:
     sudo systemd-cryptenroll --status
     tpm2_getcap handles-pcr 2>/dev/null || true
 
-# Enroll a device's LUKS key into the TPM (PCRs 0+7)
 tpm-enroll device:
     sudo systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=0+7 "{{device}}"
 
-# Add a recovery key for a LUKS device
 tpm-recovery device:
     sudo systemd-cryptenroll --recovery-key "{{device}}"
 
-# List TPM PCRs
 tpm-pcrs:
     tpm2_getcap pcrs 2>/dev/null || true
 
-# ------------------------------------------------------------------
 [group('LUKS')]
 
-# LUKS devices overview
 luks-status:
     sudo lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS
     sudo cryptsetup luksDump /dev/nvme0n1p3 2>/dev/null || true
 
-# Backup a LUKS header (run before key changes)
 luks-header-backup device backup:
     sudo cryptsetup luksHeaderBackup "{{device}}" --header-backup-file "{{backup}}"
     echo "Restore with: sudo cryptsetup luksHeaderRestore {{device}} --header-backup-file {{backup}}"
 
-# Add a new key/passphrase to a LUKS device
 luks-add-key device:
     sudo systemd-cryptenroll "{{device}}"
 
-# Remove the TPM binding from a LUKS device (tpm2 slot)
 luks-remove-tpm device:
     sudo systemd-cryptenroll --wipe-slot=tpm2 "{{device}}"
 
-# ------------------------------------------------------------------
 [group('Gaming')]
 
-# Current sched_ext scheduler + loader status
 sched-status:
     cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo "no scheduler running"
     systemctl status scx_loader --no-pager
 
-# List available scx schedulers
 sched-list:
     ls /usr/bin/scx_*
 
-# Set the default scx scheduler (e.g. scx_lavd, scx_bpfland, scx_rusty)
 sched-set sched:
     sudo sed -i "s/^default_sched = .*/default_sched = \"{{sched}}\"/" /etc/scx_loader/config.toml
     sudo systemctl restart scx_loader
     cat /sys/kernel/sched_ext/root/ops 2>/dev/null || true
 
-# Show the scx_loader configuration
 sched-config:
     cat /etc/scx_loader/config.toml
 
-# Memory management stack status (uresourced, low-memory-monitor,
-# nohang-desktop, prelockd)
 memory-status:
     systemctl status uresourced low-memory-monitor nohang-desktop prelockd --no-pager
     cat /etc/low-memory-monitor.conf
 
-# Power management status (tuned + tuned-ppd, PPD mapping)
 power-status:
     tuned-adm active
     systemctl status tuned tuned-ppd --no-pager
     cat /etc/tuned/ppd.conf
 
-# gamescope version
 gamescope-version:
     gamescope --version
 
-# Launch Steam
 steam:
     steam >/dev/null 2>&1 &
 
-# List Steam compatibility tools (Proton/Wine-GE)
 proton-list:
     find /usr/share/steam/compatibilitytools.d -maxdepth 1 -mindepth 1 -printf '%f\n' 2>/dev/null || echo "no compatibility tools installed"
 
-# NTSYNC module status (Wine sync primitives)
 ntsync-status:
     lsmod | grep ntsync || echo "ntsync module not loaded"
 
-# ------------------------------------------------------------------
 [group('NVIDIA')]
 
-# NVIDIA driver and GPU status
 nvidia-status:
     nvidia-smi
 
-# NVIDIA driver version
 nvidia-version:
     nvidia-smi --query-gpu=driver_version --format=csv,noheader
 
-# NVIDIA kernel module info for the running kernel
 nvidia-kmod:
     modinfo -F version nvidia
     find /usr/lib/modules/$(uname -r) -name 'nvidia*.ko*' -printf '%f\n'
 
-# Live GPU monitoring (dmon)
 gpu-watch:
     nvidia-smi dmon -d 1
 
-# ------------------------------------------------------------------
 [group('Flatpak')]
 
-# Update all Flatpaks
 flatpak-update:
     flatpak update -y
 
-# Remove unused Flatpak runtimes/extensions
 flatpak-clean:
     flatpak uninstall --unused -y
 
-# List installed Flatpak apps
 flatpak-apps:
     flatpak list --app
 
-# ------------------------------------------------------------------
 [group('Nix')]
 
-# Nix version (Determinate Nix)
 nix-version:
     /nix/var/nix/profiles/default/bin/nix --version
 
-# Nix store garbage collection
 nix-gc:
     sudo /nix/var/nix/profiles/default/bin/nix-store --gc
 
-# Nix channels and roots
 nix-info:
     /nix/var/nix/profiles/default/bin/nix-channel --list 2>/dev/null || true
     sudo /nix/var/nix/profiles/default/bin/nix-store -q --roots /nix/var/nix/profiles
 
-# ------------------------------------------------------------------
 [group('Audio')]
 
-# PipeWire/audio server info
 audio-info:
     pactl info
 
-# List audio sinks
 audio-sinks:
     pactl list short sinks
 
-# ------------------------------------------------------------------
 [group('Hardware')]
 
-# Battery status (laptops)
 battery:
     upower -i /org/freedesktop/UPower/devices/battery_BAT0
 
-# CPU/GPU temperatures (needs lm_sensors)
 temps:
     sensors 2>/dev/null || echo "sensors not installed (dnf install lm_sensors)"
 
-# aliases
 alias u := update
 alias s := status
 alias f := flatpak-update

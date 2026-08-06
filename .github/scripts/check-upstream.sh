@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Verify that every external source referenced by the build scripts is still
-# reachable, and that pinned tags/commits still exist upstream.
-#
-# Exit code is non-zero if any hard failure is detected. Soft failures
-# (reachable but auth-gated endpoints) are reported as warnings.
 set -euo pipefail
 
 failures=0
@@ -96,8 +91,6 @@ gitlab_release_link() {
 }
 
 echo "== Download URLs referenced by build scripts =="
-# Skip URLs containing '$' - they embed version variables that are covered by
-# the explicit pinned-tag checks below.
 while IFS= read -r url; do
   [[ "$url" == *'$'* ]] && continue
   check_url "$url"
@@ -119,10 +112,6 @@ github_commit_exists "CachyOS/ananicy-rules" "489dd6c929d17e4f6a374746ebfce9fa7b
 
 echo
 echo "== Kernel and scheduler sources =="
-# The CachyOS kernel is installed from the bieszczaders/kernel-cachyos COPR
-# (tracking CachyOS/copr-linux-cachyos); versions are live by nature of the
-# repo. Verify the repo, its GPG key and the source spec stay reachable, and
-# that the COPR project still publishes the kernel-cachyos package.
 check_url "https://download.copr.fedorainfracloud.org/results/bieszczaders/kernel-cachyos/fedora-44-x86_64/repodata/repomd.xml"
 check_url "https://download.copr.fedorainfracloud.org/results/bieszczaders/kernel-cachyos/pubkey.gpg"
 check_url "https://raw.githubusercontent.com/CachyOS/copr-linux-cachyos/master/sources/kernel-cachyos-bore/kernel-cachyos.spec"
@@ -137,8 +126,6 @@ copr_kernel_package() {
   fi
 }
 copr_kernel_package
-# NVIDIA userspace/kmod versions are matched at build time; verify the repo
-# and its release channel stay reachable.
 check_url "https://github.com/NVIDIA/open-gpu-kernel-modules/releases/latest"
 check_url "https://github.com/sched-ext/scx/tags.atom"
 

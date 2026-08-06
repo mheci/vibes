@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Install latest versions of applications from upstream release channels.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -8,9 +7,6 @@ source "${SCRIPT_DIR}/lib.sh"
 
 echo "=== Installing Latest Applications ==="
 
-# ---------------------------------------------------------------------------
-# Helper: install latest RPM from a GitHub release
-# ---------------------------------------------------------------------------
 install_latest_rpm() {
   local repo="$1" pattern="$2" name="$3"
   local url rpm
@@ -25,9 +21,6 @@ install_latest_rpm() {
   rm -f "$rpm"
 }
 
-# ---------------------------------------------------------------------------
-# Helper: install latest AppImage from a GitHub release
-# ---------------------------------------------------------------------------
 install_latest_appimage() {
   local repo="$1" pattern="$2" binary="$3" desktop_name="$4"
   local comment="$5" categories="${6:-Utility;}"
@@ -56,9 +49,6 @@ StartupNotify=true
 EOFDESKTOP
 }
 
-# ---------------------------------------------------------------------------
-# Zed Editor (latest stable from zed.dev)
-# ---------------------------------------------------------------------------
 echo "Installing Zed Editor..."
 install -d -m 0755 /usr/lib/zed
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/zed-linux-x86_64.tar.gz \
@@ -78,9 +68,6 @@ if [[ -d /usr/lib/zed/share/icons/hicolor ]]; then
 fi
 rm -rf /tmp/zed.app /tmp/zed-linux-x86_64.tar.gz
 
-# ---------------------------------------------------------------------------
-# Zen Browser (latest stable from GitHub releases, tar.xz)
-# ---------------------------------------------------------------------------
 echo "Installing Zen Browser..."
 install -d -m 0755 /usr/lib/zen-browser /usr/share/applications
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/zen-linux-x86_64.tar.xz \
@@ -108,8 +95,6 @@ if [[ -d /usr/lib/zen-browser/browser/chrome/icons/default ]]; then
   cp /usr/lib/zen-browser/browser/chrome/icons/default/default256.png \
     /usr/share/icons/hicolor/256x256/apps/zen-browser.png 2>/dev/null || true
 fi
-# Same VA-API/WebRender policy as Firefox, read from the app distribution
-# dir at startup (mirrors the Firefox policy from setup-repos-and-rpms.sh).
 install -d -m 0755 /usr/lib/zen-browser/distribution
 cat >/usr/lib/zen-browser/distribution/policies.json <<'JSON'
 {
@@ -124,29 +109,12 @@ cat >/usr/lib/zen-browser/distribution/policies.json <<'JSON'
 JSON
 rm -rf /tmp/zen-extract /tmp/zen-linux-x86_64.tar.xz
 
-# ---------------------------------------------------------------------------
-# GitHub release RPM applications
-# ---------------------------------------------------------------------------
 install_latest_rpm "anomalyco/opencode" 'opencode-desktop-linux-x86_64\.rpm$' "opencode-desktop"
 
-# Mailspring: cross-platform mail client (Foundry376; official RPM release)
 install_latest_rpm "Foundry376/Mailspring" 'mailspring-.*\.x86_64\.rpm$' "mailspring"
 
-# ---------------------------------------------------------------------------
-# Ferdium: all-in-one messaging client (WhatsApp, Telegram, Slack, ...).
-# Installed from the official upstream RPM published on GitHub Releases
-# (latest stable), resolving dependencies through DNF.
-# ---------------------------------------------------------------------------
 install_latest_rpm "ferdium/ferdium-app" 'Ferdium-linux-.*-x86_64\.rpm$' "ferdium"
 
-# ---------------------------------------------------------------------------
-# proton-cachyos (Wayland-first Proton fork, system-wide for Steam)
-# Installed from the latest CachyOS/proton-cachyos release: x86_64_v3 build
-# (best for this image's x86_64-v3 kernel/userspace), sha512-verified against
-# the per-asset checksum file shipped in the same release. Extraction goes to
-# /usr/share/steam/compatibilitytools.d so Steam lists it as a compatibility
-# tool for every game without per-user setup.
-# ---------------------------------------------------------------------------
 echo "Installing proton-cachyos..."
 compat_dir="/usr/share/steam/compatibilitytools.d/proton-cachyos"
 install -d -m 0755 /tmp/proton-cachyos "${compat_dir%/proton-cachyos}"
@@ -155,8 +123,6 @@ proton_sum_url="${proton_url%.tar.xz}.sha512sum"
 echo "Downloading proton-cachyos from ${proton_url}"
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/proton-cachyos.tar.xz "$proton_url"
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/proton-cachyos.sha512sum "$proton_sum_url"
-# Upstream sidecars are "<digest>  <filename>" (or bare digest); take the
-# digest column only.
 expected="$(awk '{print $1}' /tmp/proton-cachyos.sha512sum)"
 actual="$(sha512sum /tmp/proton-cachyos.tar.xz | awk '{print $1}')"
 if [[ -z "$expected" || "$expected" != "$actual" ]]; then
@@ -173,9 +139,6 @@ if [[ ! -x "${compat_dir}/proton" ]]; then
 fi
 rm -rf /tmp/proton-cachyos /tmp/proton-cachyos.tar.xz /tmp/proton-cachyos.sha512sum
 
-# ---------------------------------------------------------------------------
-# LM Studio (official AppImage)
-# ---------------------------------------------------------------------------
 echo "Installing LM Studio..."
 install -d -m 0755 /usr/lib/vibes-apps/lmstudio /usr/share/applications /usr/bin
 retry curl -fL --retry 4 --retry-delay 10 \
@@ -198,34 +161,18 @@ Categories=Development;Science;
 StartupNotify=true
 EOFDESKTOP
 
-# ---------------------------------------------------------------------------
-# Vicinae (AppImage; RPM excluded on Bazzite due to mesa-libEGL conflict)
-# ---------------------------------------------------------------------------
 install_latest_appimage "vicinaehq/vicinae" \
   'Vicinae-x86_64\.AppImage$' "vicinae" "Vicinae" \
   "Raycast-inspired launcher" "Utility;"
 
-# ---------------------------------------------------------------------------
-# T3 Code (pingdotgg/t3code; Electron-based editor by Theo - t3.gg)
-# No Fedora RPM or Flatpak exists; upstream ships a Linux AppImage.
-# ---------------------------------------------------------------------------
 install_latest_appimage "pingdotgg/t3code" \
   'T3-Code-[0-9.]+-x86_64\.AppImage$' "t3code" "T3 Code" \
   "Opinionated code editor built on Electron" "Development;"
 
-# ---------------------------------------------------------------------------
-# Gear Lever (AppImage manager) - native AppImage conversion
-# The original Foldex/gear-lever project is gone; pkgforge-dev maintains an
-# up-to-date AppImage (replaces the it.mijorus.gearlever Flatpak).
-# ---------------------------------------------------------------------------
 install_latest_appimage "pkgforge-dev/Gear-Lever-AppImage" \
   'Gear_Lever-.*-anylinux-x86_64\.AppImage$' "gear-lever" "Gear Lever" \
   "AppImage manager and launcher" "Utility;"
 
-# ---------------------------------------------------------------------------
-# MangoJuice (MangoHud configuration GUI) - native AppImage conversion
-# Upstream (radiolamp/mangojuice) ships the AppImage inside a zip archive.
-# ---------------------------------------------------------------------------
 echo "Installing MangoJuice..."
 MJ_ZIP_URL="$(gh_latest_asset_url "radiolamp/mangojuice" \
   'MangoJuice-AppImagename-x86_64\.zip$')"
@@ -257,11 +204,6 @@ StartupNotify=true
 EOFMJDESKTOP
 rm -rf /tmp/mangojuice /tmp/mangojuice.zip
 
-# ---------------------------------------------------------------------------
-# Mission Center (system/GPU monitoring) - native AppImage conversion
-# Upstream publishes the AppImage as a GitLab release link (job artifact);
-# GitLab, not GitHub, so resolve it via the GitLab releases API.
-# ---------------------------------------------------------------------------
 echo "Installing Mission Center..."
 MC_PROJECT="mission-center-devs%2Fmission-center"
 MC_API="https://gitlab.com/api/v4/projects/${MC_PROJECT}/releases/permalink/latest"
@@ -292,10 +234,6 @@ Categories=System;Monitor;
 StartupNotify=true
 EOFMCDESKTOP
 
-# ---------------------------------------------------------------------------
-# opencode CLI (pinned to latest GitHub release; the opencode.ai/install
-# script fails silently in the OCI build, so download the release tarball)
-# ---------------------------------------------------------------------------
 echo "Installing opencode CLI..."
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/opencode-cli.tar.gz \
   "$(gh_latest_asset_url "anomalyco/opencode" 'opencode-linux-x64\.tar\.gz$')"
@@ -310,10 +248,6 @@ fi
 install -Dm755 "${cli_bin}" /usr/bin/opencode
 rm -rf /tmp/opencode-cli /tmp/opencode-cli.tar.gz
 
-# ---------------------------------------------------------------------------
-# RNNoise LADSPA plugin (audio noise suppression)
-# Pinned to v1.10; uses pre-built binary from tagged release.
-# ---------------------------------------------------------------------------
 echo "Installing RNNoise LADSPA plugin..."
 RNNOISE_TAG="v1.10"
 install -d -m 0755 /usr/lib64/rnnoise /usr/lib64/ladspa
@@ -332,14 +266,7 @@ if [[ -d /tmp/linux-rnnoise ]]; then
 fi
 rm -rf /tmp/linux-rnnoise /tmp/linux-rnnoise.zip
 
-# ---------------------------------------------------------------------------
-# bpftune (BPF-based auto-tuning daemon)
-# Built from source because oracle/bpftune has no release tags.
-# ---------------------------------------------------------------------------
 echo "Building and installing bpftune from upstream..."
-# bpftune compiles its BPF programs against the userspace kernel headers
-# (/usr/include, provided by kernel-headers) - kernel-devel is not required.
-# The CachyOS kernel's own -devel package covers anything kernel-tree based.
 install_available kernel-headers
 
 BPFTUNE_PIN="4712347f2da0b7d4a5fbdb0d81d071c1704b3f20"
@@ -349,10 +276,6 @@ git -C /tmp/bpftune init -q
 git -C /tmp/bpftune remote add origin https://github.com/oracle/bpftune.git
 retry git -C /tmp/bpftune fetch -q --depth 1 origin "${BPFTUNE_PIN}"
 git -C /tmp/bpftune checkout -q FETCH_HEAD
-# Upstream bug (since 2024-12-19, commit 2554af924a): src/libbpftune.map lists
-# "bpftune_server_port" but libbpftune.c defines "bpftuner_server_port", so the
-# shared library link fails with "version script assignment ... symbol not
-# defined".  Align the map with the code.
 sed -i 's/^[[:space:]]*bpftune_server_port;/		bpftuner_server_port;/' /tmp/bpftune/src/libbpftune.map
 make -C /tmp/bpftune -j"$(nproc)"
 make -C /tmp/bpftune install
@@ -374,13 +297,6 @@ else
 fi
 rm -rf /tmp/bpftune
 
-# ---------------------------------------------------------------------------
-# nohang (sophisticated low-memory handler; replaces systemd-oomd)
-# The Fedora package is orphaned (EPEL8 only), so build from upstream like
-# the other from-source tools. Pure Python: no build dependencies. The
-# desktop variant enables PSI checking and GUI notifications and is the
-# upstream-recommended config for desktops.
-# ---------------------------------------------------------------------------
 echo "Building and installing nohang from upstream..."
 NOHANG_PIN="5938a2e2249cb93ff21094dd548f770c47cc1860"
 rm -rf /tmp/nohang
@@ -401,11 +317,6 @@ else
 fi
 rm -rf /tmp/nohang
 
-# ---------------------------------------------------------------------------
-# prelockd (pin executables/shared libraries in RAM)
-# The Fedora package is EPEL8-only; upstream ships a prebuilt binary, so
-# this is a pure install - no compiler required.
-# ---------------------------------------------------------------------------
 echo "Building and installing prelockd from upstream..."
 PRELOCKD_PIN="584f70ac05b403237a12193f1e70380b283d4083"
 rm -rf /tmp/prelockd
@@ -426,23 +337,8 @@ else
 fi
 rm -rf /tmp/prelockd
 
-# ---------------------------------------------------------------------------
-# NOTE on package policy: this image NEVER installs applications via coding
-# language package managers (pip, uv, npm, cargo, go, ...). The package
-# managers themselves are installed (from Fedora RPMs / upstream release
-# binaries), but end-user tools must ship via Fedora repos, GitLab/GitHub
-# RPMs, or direct release artifacts, with Flatpak as the very last resort.
-# Software that only exists in a language package manager (npm, uv/pip,
-# crates.io, ...) is left out of the image entirely; users can add it at
-# runtime with their own tooling if they want it.
-# ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# qui (qBittorrent web UI, single binary from GitHub)
-# ---------------------------------------------------------------------------
 echo "Installing qui (qBittorrent web UI)..."
-# Pinned to v1.23.0 (2025-07-13) - update deliberately after testing.
-# Fallback to dynamic latest asset via gh_asset_url if pinned fails.
 QUI_VERSION="v1.23.0"
 QUI_URL="https://github.com/autobrr/qui/releases/download/${QUI_VERSION}/qui_${QUI_VERSION#v}_linux_x86_64.tar.gz"
 install -d -m 0755 /usr/local/bin
@@ -458,24 +354,6 @@ tar -C /usr/local/bin -xzf /tmp/qui.tar.gz 2>/dev/null || {
 chmod 0755 /usr/local/bin/qui 2>/dev/null || true
 rm -f /tmp/qui.tar.gz
 
-# ---------------------------------------------------------------------------
-# Nix (DeterminateSystems/nix-installer, multi-user / rootless for users)
-#
-# Bluefin is an ostree (bootc) image: the root filesystem is read-only at
-# runtime and SELinux is enforcing. The Determinate installer normally uses
-# its own ostree planner + SELinux provisioning, but that requires a running
-# systemd (present only after first boot, not during image build). Instead:
-#
-#   1. At build time the installer runs with `--init none` inside the build
-#      container (writable /), which skips systemd and SELinux integration.
-#   2. The resulting store tree is moved to /var/nix (persistent, writable
-#      state on ostree) and an empty /nix mountpoint is kept in the image.
-#   3. At runtime, nix.mount bind-mounts /var/nix onto /nix, and systemd
-#      socket-activates nix-daemon, giving every user rootless multi-user
-#      Nix (the daemon runs as root; clients connect over the unix socket).
-#   4. A oneshot service installs the SELinux policy module (nix.pp) and
-#      relabels /nix before nix-daemon can start.
-# ---------------------------------------------------------------------------
 echo "Installing Nix (Determinate Systems installer)..."
 
 NIX_INSTALLER_TAG="v3.21.9"
@@ -494,8 +372,6 @@ if [[ ! -x /var/nix/var/nix/profiles/default/bin/nix ]]; then
 fi
 rm -f "${NIX_INSTALL_LOG}"
 
-# Move the store into persistent state (/var) and keep /nix as the runtime
-# bind-mountpoint (root is read-only on bootc images).
 if [[ -d /nix/var && ! -d /var/nix/var ]]; then
   echo "Moving Nix store to /var/nix (persistent ostree state)..."
   rm -rf /var/nix
@@ -503,9 +379,6 @@ if [[ -d /nix/var && ! -d /var/nix/var ]]; then
   install -d -m 0755 /nix
 fi
 
-# SELinux policy module for the Nix daemon (same source the installer
-# embeds; the installer skips this in the build container, so we ship it
-# and load it at first boot).
 NIX_POLICY_SRC="https://raw.githubusercontent.com/DeterminateSystems/nix-installer/${NIX_INSTALLER_TAG}/src/action/linux/selinux/determinate-nix.pp"
 if [[ ! -f /usr/share/selinux/packages/determinate-nix.pp ]]; then
   install -d -m 0755 /usr/share/selinux/packages
@@ -513,7 +386,6 @@ if [[ ! -f /usr/share/selinux/packages/determinate-nix.pp ]]; then
     -o /usr/share/selinux/packages/determinate-nix.pp "${NIX_POLICY_SRC}"
 fi
 
-# Runtime units: bind mount, daemon service/socket, SELinux policy loader.
 cat >/usr/lib/systemd/system/nix.mount <<'NIXMOUNT'
 [Unit]
 Description=Nix Package Manager
@@ -593,18 +465,12 @@ done
 ln -sf /usr/lib/systemd/system/nix-daemon.socket \
   /etc/systemd/system/sockets.target.wants/nix-daemon.socket
 
-# Make Nix available in interactive shells (sources the installer's own
-# nix-daemon.sh which sets PATH etc. under /nix).
 cat >/etc/profile.d/nix.sh <<'NIXPROFILE'
-# Source the Determinate Nix shell environment (PATH etc.)
 if [ -r /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
   . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
 fi
 NIXPROFILE
 
-# ---------------------------------------------------------------------------
-# bun (JavaScript runtime, single binary from GitHub)
-# ---------------------------------------------------------------------------
 echo "Installing bun..."
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/bun.zip \
   "$(gh_latest_asset_url "oven-sh/bun" 'bun-linux-x64\.zip$')"
@@ -620,9 +486,6 @@ install -Dm755 "${bun_bin}" /usr/local/bin/bun
 ln -sf /usr/local/bin/bun /usr/local/bin/bunx
 rm -rf /tmp/bun-x /tmp/bun.zip
 
-# ---------------------------------------------------------------------------
-# deno (JavaScript/TypeScript runtime, single binary from GitHub)
-# ---------------------------------------------------------------------------
 echo "Installing deno..."
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/deno.zip \
   "$(gh_latest_asset_url "denoland/deno" 'deno-x86_64-unknown-linux-gnu\.zip$')"
@@ -637,9 +500,6 @@ fi
 install -Dm755 "${deno_bin}" /usr/local/bin/deno
 rm -rf /tmp/deno-x /tmp/deno.zip
 
-# ---------------------------------------------------------------------------
-# zellij (terminal workspace, single static binary from GitHub)
-# ---------------------------------------------------------------------------
 echo "Installing zellij..."
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/zellij.tar.gz \
   "$(gh_latest_asset_url "zellij-org/zellij" 'zellij-x86_64-unknown-linux-musl\.tar\.gz$')"
@@ -654,9 +514,6 @@ fi
 install -Dm755 "${zellij_bin}" /usr/local/bin/zellij
 rm -rf /tmp/zellij-x /tmp/zellij.tar.gz
 
-# ---------------------------------------------------------------------------
-# glance (self-hosted dashboard, single static binary from GitHub)
-# ---------------------------------------------------------------------------
 echo "Installing glance..."
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/glance.tar.gz \
   "$(gh_latest_asset_url "glanceapp/glance" 'glance-linux-amd64\.tar\.gz$')"
@@ -671,11 +528,6 @@ fi
 install -Dm755 "${glance_bin}" /usr/local/bin/glance
 rm -rf /tmp/glance-x /tmp/glance.tar.gz
 
-# ---------------------------------------------------------------------------
-# Commet (Matrix client). The Linux portable build is published on GitHub
-# Releases as a Flutter bundle; extracted to /usr/lib/commet and wired into
-# the menu.
-# ---------------------------------------------------------------------------
 echo "Installing Commet..."
 COMMET_URL="$(gh_latest_asset_url "commetchat/commet" \
   'commet-linux-portable-x64\.tar\.gz$')"
@@ -709,12 +561,6 @@ if [[ -n "${commet_icon}" ]]; then
 fi
 rm -rf /tmp/commet /tmp/commet-extract /tmp/commet.tar.gz
 
-# ---------------------------------------------------------------------------
-# ananicy-cpp rules (CachyOS). ananicy-cpp is installed from Fedora; this
-# ruleset adds game, browser and desktop rules maintained by CachyOS and the
-# community. Installed into /etc/ananicy.d where the daemon reads them,
-# pinned to an exact upstream commit.
-# ---------------------------------------------------------------------------
 echo "Installing CachyOS ananicy rules..."
 ANANICY_PIN="489dd6c929d17e4f6a374746ebfce9fa7bd5a3d1"
 rm -rf /tmp/ananicy-rules
@@ -730,13 +576,6 @@ cp -a /tmp/ananicy-rules/00-cgroups.cgroups /tmp/ananicy-rules/00-types.types \
   /tmp/ananicy-rules/ananicy.conf /etc/ananicy.d/
 rm -rf /tmp/ananicy-rules
 
-# ---------------------------------------------------------------------------
-# Vicinae GNOME extension (clipboard and window-management APIs for the
-# Vicinae launcher): latest release from GitHub, installed system-wide so
-# every user gets it. The extension declares GNOME Shell 46-50; this image
-# tracks Fedora 44 (GNOME 51), so the shell-version list is extended after
-# extraction to keep the extension active instead of disabled.
-# ---------------------------------------------------------------------------
 echo "Installing Vicinae GNOME extension..."
 VICINAE_EXT_UUID="vicinae@dagimg-dot"
 VICINAE_EXT_DIR="/usr/share/gnome-shell/extensions/${VICINAE_EXT_UUID}"
@@ -779,9 +618,6 @@ if [[ -d "${VICINAE_EXT_DIR}/schemas" ]]; then
 fi
 rm -rf /tmp/vicinae-ext /tmp/vicinae-ext.zip
 
-# ---------------------------------------------------------------------------
-# GitHub-release fonts (not packaged in Fedora)
-# ---------------------------------------------------------------------------
 install_github_fonts() {
   local repo="$1" pattern="$2" family="$3"
   local url zip
@@ -798,26 +634,17 @@ install_github_fonts() {
   rm -rf "/tmp/${family}-fonts" "$zip"
 }
 
-# Monaspace (githubnext/monaspace): static TTFs are more compatible than the
-# variable release with older tooling.
 install_github_fonts "githubnext/monaspace" 'monaspace-static-v[0-9.]+\.zip$' "monaspace"
 
-# Inter (rsms/inter): variable + static weights.
 install_github_fonts "rsms/inter" 'Inter-[0-9.]+\.zip$' "inter"
 
-# Lilex (mishamyrt/Lilex)
 install_github_fonts "mishamyrt/Lilex" 'Lilex\.zip$' "lilex"
 
-# Fusion JetBrainsMapleMono (SpaceTimee/Fusion-JetBrainsMapleMono):
-# XX-XX-XX-XX = default build (ligatures, no hinting, no nerd-font patches).
 install_github_fonts "SpaceTimee/Fusion-JetBrainsMapleMono" \
   'JetBrainsMapleMono-XX-XX-XX-XX\.zip$' "fusion-jetbrainsmaplemono"
 
 fc-cache -f >/dev/null 2>&1 || true
 
-# ---------------------------------------------------------------------------
-# Post-install smoke checks
-# ---------------------------------------------------------------------------
 echo "=== Running post-install smoke checks ==="
 errors=0
 
@@ -859,8 +686,6 @@ check_command gamescope
 check_command mangohud
 check_command nicotine
 
-# proton-cachyos: verify the compat tool entry point ships in the system-wide
-# Steam compatibility tools directory.
 if [[ -x /usr/share/steam/compatibilitytools.d/proton-cachyos/proton ]]; then
   echo "  OK: proton-cachyos (compatibility tool)"
 else
@@ -868,9 +693,6 @@ else
   errors=$((errors + 1))
 fi
 
-# Memory management stack: uresourced + low-memory-monitor are RPMs from
-# setup-repos-and-rpms.sh (binaries live in /usr/libexec, not on PATH),
-# nohang + prelockd are built from source above.
 for unit in uresourced low-memory-monitor nohang-desktop prelockd; do
   check_file "/etc/systemd/system/multi-user.target.wants/${unit}.service"
 done
@@ -889,7 +711,6 @@ if [[ -e /usr/lib/systemd/system/systemd-oomd.service ]]; then
   check_file /etc/systemd/system/systemd-oomd.service
 fi
 
-# Power management: tuned + tuned-ppd with the max-performance mapping.
 for pkg in tuned tuned-ppd; do
   if rpm -q "$pkg" >/dev/null 2>&1; then
     echo "  OK: $pkg (rpm)"
@@ -910,7 +731,6 @@ else
 fi
 check_file /etc/dconf/db/local.d/02-vibes-power
 
-# Desktop environment: VKD3D config, Qt log level, persistent shader caches.
 check_file /etc/environment.d/90-vibes-desktop-env.conf
 if grep -q '^VKD3D_CONFIG=descriptor_heap$' /etc/environment.d/90-vibes-desktop-env.conf 2>/dev/null; then
   echo "  OK: VKD3D_CONFIG=descriptor_heap"
@@ -933,7 +753,6 @@ for var in '__GL_SHADER_DISK_CACHE_PATH' 'MESA_SHADER_CACHE_DIR' 'DXVK_STATE_CAC
   fi
 done
 
-# Browser/media hardware acceleration configuration.
 for policy in /etc/opt/chrome/policies/managed/vibes-hw-accel.json \
     /etc/chromium/policies/managed/vibes-hw-accel.json \
     /etc/brave/policies/managed/vibes-hw-accel.json; do
@@ -951,22 +770,18 @@ if [[ -d /usr/lib/zen-browser ]]; then
   check_file /usr/lib/zen-browser/distribution/policies.json
 fi
 
-# SELinux gaming/desktop optimization unit.
 check_file /etc/systemd/system/vibes-selinux.service
 check_file /etc/systemd/system/multi-user.target.wants/vibes-selinux.service
 
-# New cloud-native / dev tooling
 for cmd in uv hx yt-dlp gh zoxide bun deno t3code; do
   check_command "$cmd"
 done
 
-# Terminal tooling, media apps and utilities added to the image.
 for cmd in tmux zellij lollypop rhythmbox fragments trivy \
     commet qbittorrent glance; do
   check_command "$cmd"
 done
 
-# CachyOS ananicy rules installed for the ananicy-cpp daemon.
 check_file /etc/ananicy.d/ananicy.conf
 check_file /etc/ananicy.d/00-types.types
 if [[ -d /etc/ananicy.d/00-default ]]; then
@@ -976,7 +791,6 @@ else
   errors=$((errors + 1))
 fi
 
-# Vicinae GNOME extension installed system-wide.
 check_file /usr/share/gnome-shell/extensions/vicinae@dagimg-dot/metadata.json
 
 if rpm -q sudo-rs >/dev/null 2>&1; then
@@ -986,10 +800,6 @@ else
   errors=$((errors + 1))
 fi
 
-# Nix: installed at build time into /var/nix (bind-mounted to /nix at boot).
-# Profile symlinks point at /nix/store/..., which only resolves at runtime
-# through the mount, so validate the store contents and the profile link
-# itself (the nix binary is found inside the store, not via the links).
 if [[ -d /var/nix/store ]] && [[ -n "$(find /var/nix/store -maxdepth 5 \( -type f -o -type l \) -name nix 2>/dev/null | head -n1)" ]]; then
   echo "  OK: nix store (binary present)"
 else
@@ -1013,7 +823,6 @@ check_file /usr/share/selinux/packages/determinate-nix.pp
 check_file /etc/profile.d/nix.sh
 check_file /etc/sudoers.d/99-vibes-wheel-nopasswd
 
-# Font families installed from GitHub releases
 for dir in monaspace inter lilex fusion-jetbrainsmaplemono \
     source-code-pro; do
   if find /usr/share/fonts -maxdepth 2 -type d -iname "*${dir}*" \
@@ -1025,8 +834,6 @@ for dir in monaspace inter lilex fusion-jetbrainsmaplemono \
   fi
 done
 
-# Faugus Launcher is an RPM install from a COPR; verify the package rather
-# than a PATH binary.
 if rpm -q faugus-launcher >/dev/null 2>&1; then
   echo "  OK: faugus-launcher (rpm)"
 else
@@ -1034,8 +841,6 @@ else
   errors=$((errors + 1))
 fi
 
-# Tearing support from the custom mutter build (MR !3797) must be present in
-# the installed library and enabled in the environment.
 if grep -aq "tearing" /usr/lib64/libmutter-51.so.0 2>/dev/null; then
   echo "  OK: libmutter tearing support (MR !3797)"
 else
@@ -1051,8 +856,6 @@ else
   errors=$((errors + 1))
 fi
 
-# GSConnect is a GNOME Shell extension package; its daemon is not in PATH,
-# so verify the RPM itself.
 if rpm -q gnome-shell-extension-gsconnect >/dev/null 2>&1; then
   echo "  OK: gnome-shell-extension-gsconnect (rpm)"
 else
@@ -1082,9 +885,6 @@ if [[ $errors -gt 0 ]]; then
   exit 1
 fi
 
-# ---------------------------------------------------------------------------
-# Cleanup
-# ---------------------------------------------------------------------------
 echo "--- Cleaning up ---"
 clean_build_artifacts
 
