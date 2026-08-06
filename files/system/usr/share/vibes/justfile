@@ -159,6 +159,14 @@ gamescope-version:
 steam:
     steam >/dev/null 2>&1 &
 
+steam-dev-cfg:
+    mkdir -p ~/.steam/steam
+    touch ~/.steam/steam/steam_dev.cfg
+    grep -qxF 'unShaderBackgroundProcessingThreads 16' ~/.steam/steam/steam_dev.cfg || echo 'unShaderBackgroundProcessingThreads 16' >> ~/.steam/steam/steam_dev.cfg
+    grep -qxF '@nClientDownloadEnableHTTP2PlatformLinux 0' ~/.steam/steam/steam_dev.cfg || echo '@nClientDownloadEnableHTTP2PlatformLinux 0' >> ~/.steam/steam/steam_dev.cfg
+    echo "steam_dev.cfg:"
+    cat ~/.steam/steam/steam_dev.cfg
+
 proton-list:
     find /usr/share/steam/compatibilitytools.d -maxdepth 1 -mindepth 1 -printf '%f\n' 2>/dev/null || echo "no compatibility tools installed"
 

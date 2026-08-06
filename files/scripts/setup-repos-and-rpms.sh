@@ -418,6 +418,30 @@ ln -sf /etc/systemd/system/vibes-selinux.service \
   /etc/systemd/system/multi-user.target.wants/vibes-selinux.service
 echo "vibes-selinux.service enabled"
 
+echo "--- Configuring gamescope capabilities ---"
+
+if command -v gamescope >/dev/null 2>&1; then
+  setcap cap_sys_nice=eip /usr/bin/gamescope 2>/dev/null || true
+  cat >/usr/lib/systemd/system/vibes-gamescope-cap.service <<'UNIT'
+[Unit]
+Description=Apply CAP_SYS_NICE to gamescope
+ConditionPathExists=/usr/bin/gamescope
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/setcap cap_sys_nice=eip /usr/bin/gamescope
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  install -d -m 0755 /etc/systemd/system/multi-user.target.wants
+  ln -sf /usr/lib/systemd/system/vibes-gamescope-cap.service \
+    /etc/systemd/system/multi-user.target.wants/vibes-gamescope-cap.service
+  echo "vibes-gamescope-cap.service enabled"
+fi
+
 echo "--- Controlling automatic updates ---"
 
 install -d -m 0755 /etc/systemd/system
