@@ -22,7 +22,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   release tags instead of HEAD builds.
 - A system-wide fontconfig profile renders text with full hinting and LCD
   subpixel filtering for sharp, clear glyphs on 1080p and 1440p displays.
-- The OpenQA test forces TCG up front and allows more boot time.
+- The `vjust` command runner gains one-command switches between the
+  scx_cake, scx_cosmos and scx_lavd schedulers, each with the optimal
+  extreme-gaming performance flags.
+- bottom is installed from its official GitHub release (not packaged in
+  Fedora 44).
 - Images are verified against the embedded cosign public key before an
   upgrade is applied, and UKI generation is supported.
 - Third-party GitHub Actions are pinned to immutable commit SHAs.

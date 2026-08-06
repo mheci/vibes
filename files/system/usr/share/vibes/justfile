@@ -96,6 +96,51 @@ sched-set sched:
     sudo systemctl restart scx_loader
     cat /sys/kernel/sched_ext/root/ops 2>/dev/null || true
 
+sched-cake:
+    sudo tee /etc/scx_loader/config.toml >/dev/null <<'TOML'
+default_sched = "scx_cake"
+default_mode = "Gaming"
+
+[scheds.scx_cake]
+gaming_mode = ["--performance"]
+lowlatency_mode = ["--performance"]
+auto_mode = ["--autopilot"]
+powersave_mode = ["--powersave"]
+server_mode = ["--autopilot"]
+TOML
+    sudo systemctl restart scx_loader
+    cat /sys/kernel/sched_ext/root/ops 2>/dev/null || true
+
+sched-cosmos:
+    sudo tee /etc/scx_loader/config.toml >/dev/null <<'TOML'
+default_sched = "scx_cosmos"
+default_mode = "Gaming"
+
+[scheds.scx_cosmos]
+gaming_mode = ["--performance"]
+lowlatency_mode = ["--performance"]
+auto_mode = ["--autopilot"]
+powersave_mode = ["--powersave"]
+server_mode = ["--autopilot"]
+TOML
+    sudo systemctl restart scx_loader
+    cat /sys/kernel/sched_ext/root/ops 2>/dev/null || true
+
+sched-lavd:
+    sudo tee /etc/scx_loader/config.toml >/dev/null <<'TOML'
+default_sched = "scx_lavd"
+default_mode = "Gaming"
+
+[scheds.scx_lavd]
+gaming_mode = ["--performance"]
+lowlatency_mode = ["--performance"]
+auto_mode = ["--autopilot"]
+powersave_mode = ["--powersave"]
+server_mode = ["--autopilot"]
+TOML
+    sudo systemctl restart scx_loader
+    cat /sys/kernel/sched_ext/root/ops 2>/dev/null || true
+
 sched-config:
     cat /etc/scx_loader/config.toml
 
