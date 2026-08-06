@@ -576,48 +576,6 @@ cp -a /tmp/ananicy-rules/00-cgroups.cgroups /tmp/ananicy-rules/00-types.types \
   /tmp/ananicy-rules/ananicy.conf /etc/ananicy.d/
 rm -rf /tmp/ananicy-rules
 
-echo "Installing Vicinae GNOME extension..."
-VICINAE_EXT_UUID="vicinae@dagimg-dot"
-VICINAE_EXT_DIR="/usr/share/gnome-shell/extensions/${VICINAE_EXT_UUID}"
-VICINAE_EXT_URL="$(gh_latest_asset_url "vicinaehq/gnome-extension" \
-  "vicinae@dagimg-dot\.shell-extension-.*\.zip$")"
-rm -rf /tmp/vicinae-ext /tmp/vicinae-ext.zip
-retry curl -fL --retry 4 --retry-delay 10 -o /tmp/vicinae-ext.zip "${VICINAE_EXT_URL}"
-mkdir -p /tmp/vicinae-ext
-unzip -q /tmp/vicinae-ext.zip -d /tmp/vicinae-ext
-if [[ ! -f /tmp/vicinae-ext/metadata.json ]]; then
-  echo "ERROR: Vicinae extension zip has no metadata.json" >&2
-  exit 1
-fi
-install -d -m 0755 /usr/share/gnome-shell/extensions
-rm -rf "${VICINAE_EXT_DIR}"
-install -m 0755 -d "${VICINAE_EXT_DIR}"
-cp -a /tmp/vicinae-ext/. "${VICINAE_EXT_DIR}/"
-if [[ -f "${VICINAE_EXT_DIR}/metadata.json" ]]; then
-  python3 - "${VICINAE_EXT_DIR}/metadata.json" <<'PY'
-import json, sys
-path = sys.argv[1]
-with open(path, encoding="utf-8") as fh:
-    meta = json.load(fh)
-shell = list(meta.get("shell-version", []))
-for ver in ("51", "52"):
-    if ver not in shell:
-        shell.append(ver)
-meta["shell-version"] = shell
-with open(path, "w", encoding="utf-8") as fh:
-    json.dump(meta, fh, indent=2)
-    fh.write("\n")
-PY
-fi
-if [[ -d "${VICINAE_EXT_DIR}/schemas" ]]; then
-  for schema in "${VICINAE_EXT_DIR}"/schemas/*.gschema.xml; do
-    [[ -f "${schema}" ]] && install -m 0644 "${schema}" \
-      /usr/share/glib-2.0/schemas/
-  done
-  glib-compile-schemas /usr/share/glib-2.0/schemas 2>/dev/null || true
-fi
-rm -rf /tmp/vicinae-ext /tmp/vicinae-ext.zip
-
 install_github_fonts() {
   local repo="$1" pattern="$2" family="$3"
   local url zip
@@ -677,7 +635,6 @@ check_command opencode
 check_command bpftune
 check_command yazi
 check_command mpv
-check_command gnome-tweaks
 check_command mailspring
 check_command ferdium
 check_command brave-origin
@@ -729,7 +686,6 @@ else
   echo "  FAIL: tuned PPD performance mapping missing" >&2
   errors=$((errors + 1))
 fi
-check_file /etc/dconf/db/local.d/02-vibes-power
 
 check_file /etc/environment.d/90-vibes-desktop-env.conf
 if grep -q '^VKD3D_CONFIG=descriptor_heap$' /etc/environment.d/90-vibes-desktop-env.conf 2>/dev/null; then
@@ -791,8 +747,6 @@ else
   errors=$((errors + 1))
 fi
 
-check_file /usr/share/gnome-shell/extensions/vicinae@dagimg-dot/metadata.json
-
 if rpm -q sudo-rs >/dev/null 2>&1; then
   echo "  OK: sudo-rs (rpm)"
 else
@@ -841,35 +795,17 @@ else
   errors=$((errors + 1))
 fi
 
-if grep -aq "tearing" /usr/lib64/libmutter-51.so.0 2>/dev/null; then
-  echo "  OK: libmutter tearing support (MR !3797)"
-else
-  echo "  FAIL: libmutter tearing support not found" >&2
-  errors=$((errors + 1))
-fi
-
-if grep -aq "MUTTER_DEBUG_EXPERIMENTAL_FEATURES=tearing" \
-    /etc/environment.d/90-vibes-desktop-env.conf 2>/dev/null; then
-  echo "  OK: mutter tearing experimental feature enabled"
-else
-  echo "  FAIL: mutter tearing env var not configured" >&2
-  errors=$((errors + 1))
-fi
-
-if rpm -q gnome-shell-extension-gsconnect >/dev/null 2>&1; then
-  echo "  OK: gnome-shell-extension-gsconnect (rpm)"
-else
-  echo "  FAIL: gnome-shell-extension-gsconnect not installed" >&2
-  errors=$((errors + 1))
-fi
-
 check_file /usr/lib64/ladspa/librnnoise_ladspa.so
 check_file /etc/systemd/system/multi-user.target.wants/bpftune.service
-check_file /etc/environment.d/10-vibes-qt.conf
-check_file /etc/dconf/db/local.d/01-vibes-gtk
 check_file /usr/share/icons/MoreWaita/index.theme
 check_file /usr/share/themes/Yaru/index.theme
 check_file /usr/share/icons/Yaru/index.theme
+if rpm -q kdeconnectd >/dev/null 2>&1; then
+  echo "  OK: kdeconnectd (rpm)"
+else
+  echo "  FAIL: kdeconnectd not installed" >&2
+  errors=$((errors + 1))
+fi
 
 for cmd in lact lmstudio vicinae ananicy-cpp qui helium zen \
     mission-center gear-lever mangojuice; do
