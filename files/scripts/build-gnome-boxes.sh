@@ -9,8 +9,8 @@ echo "=== Building GNOME Boxes from upstream trunk ==="
 
 BUILD_DIR="/tmp/gnome-boxes"
 BOXES_REPO="https://gitlab.gnome.org/GNOME/gnome-boxes.git"
-BOXES_BRANCH="main"
-BOXES_VERSION=""
+BOXES_TAG="50.0"
+BOXES_VERSION="${BOXES_TAG}"
 
 build_boxes() {
   echo "--- Installing GNOME Boxes build dependencies ---"
@@ -31,14 +31,13 @@ build_boxes() {
     fi
   done
 
-  echo "--- Cloning GNOME Boxes (${BOXES_BRANCH}) ---"
+  echo "--- Cloning GNOME Boxes (${BOXES_TAG}) ---"
   rm -rf "${BUILD_DIR}"
   git init -q "${BUILD_DIR}"
   git -C "${BUILD_DIR}" remote add origin "${BOXES_REPO}"
-  retry git -C "${BUILD_DIR}" fetch -q --depth 1 origin "${BOXES_BRANCH}"
+  retry git -C "${BUILD_DIR}" fetch -q --depth 1 origin "refs/tags/${BOXES_TAG}"
   git -C "${BUILD_DIR}" checkout -q FETCH_HEAD
-  BOXES_VERSION="$(git -C "${BUILD_DIR}" rev-parse --short HEAD)"
-  echo "Building GNOME Boxes at commit ${BOXES_VERSION}"
+  echo "Building GNOME Boxes at tag ${BOXES_TAG}"
 
   echo "--- Configuring and building ---"
   meson setup "${BUILD_DIR}/build" "${BUILD_DIR}" \

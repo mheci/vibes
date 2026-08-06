@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v7.0.1
 
       - name: Maximize build space
-        uses: jlumbroso/free-disk-space@v1.3.1
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
           tool-cache: true
           large-packages: true
@@ -133,6 +133,164 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: boot-serial-log
+          path: serial.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  upgrade-test:
+    name: Upgrade path test (QEMU)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Maximize build space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+          large-packages: true
+          docker-images: false
+
+      - name: Install cosign
+        run: |
+          curl -fsSL -o /tmp/cosign \
+            https://github.com/sigstore/cosign/releases/download/v2.6.4/cosign-linux-amd64
+          chmod +x /tmp/cosign
+          sudo install -m 0755 /tmp/cosign /usr/local/bin/cosign
+
+      - name: Resolve previous image
+        id: previous
+        run: |
+          IMG="ghcr.io/${{ github.repository_owner }}/vibes:previous"
+          if cosign verify --key cosign.pub "${IMG}" >/dev/null 2>&1; then
+            echo "Found previous image: ${IMG}"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "image=${IMG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No valid :previous image yet, skipping upgrade test"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install podman and QEMU
+        if: steps.previous.outputs.skip == 'false'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman qemu-system-x86
+
+      - name: Build bootable disk image from previous
+        if: steps.previous.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          truncate -s 32G output/vibes-prev.raw
+          BOOTC_DIRECT_IO=on sudo podman run --rm --privileged \
+            --pid=host --ipc=host --security-opt label=type:unconfined_t \
+            -v /dev:/dev \
+            -v /var/lib/containers:/var/lib/containers \
+            -v "$(pwd)/output:/output" \
+            ${{ steps.previous.outputs.image }} \
+            bootc install to-disk --generic-image --via-loopback \
+            --filesystem xfs \
+            --karg console=ttyS0,115200 \
+            --karg systemd.unit=multi-user.target \
+            --karg systemd.getty_autologin \
+            /output/vibes-prev.raw
+
+      - name: Upgrade from previous to latest in QEMU
+        if: steps.previous.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          ACCEL="tcg"
+          CPU="max"
+          if [[ -r /dev/kvm ]] && [[ -w /dev/kvm ]]; then
+            ACCEL="kvm"
+            CPU="host"
+          fi
+          echo "Using accel=${ACCEL}"
+          rm -f ser.in ser.out serial.log
+          mkfifo ser.in ser.out
+          timeout 2400 qemu-system-x86_64 -machine accel=${ACCEL} \
+            -cpu ${CPU} -smp 4 -m 4096 -nographic -no-reboot \
+            -drive file=output/vibes-prev.raw,format=raw,if=virtio \
+            -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+            -serial pipe:ser > /dev/null 2>&1 &
+          qemu_pid=$!
+          exec 3>ser.in
+          (cat ser.out > serial.log) &
+          cat_pid=$!
+          first=0
+          for _ in $(seq 1 480); do
+            printf 'echo UP_MARK_1\n' >&3
+            if grep -q "UP_MARK_1" serial.log 2>/dev/null; then
+              first=1
+              echo "First boot shell ready"
+              break
+            fi
+            if ! kill -0 "$qemu_pid" 2>/dev/null; then
+              echo "::error::QEMU exited during first boot"
+              break
+            fi
+            sleep 5
+          done
+          if [[ $first -ne 1 ]]; then
+            tail -n 80 serial.log 2>/dev/null || true
+            exit 1
+          fi
+          echo "Running bootc upgrade..."
+          printf 'bootc upgrade\n' >&3
+          upgraded=0
+          for _ in $(seq 1 240); do
+            if grep -qE "Deployment updated|No update available" serial.log 2>/dev/null; then
+              upgraded=1
+              break
+            fi
+            if ! kill -0 "$qemu_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+          if [[ $upgraded -ne 1 ]]; then
+            echo "::error::bootc upgrade did not complete"
+            tail -n 80 serial.log 2>/dev/null || true
+            exit 1
+          fi
+          echo "Rebooting into the upgraded deployment..."
+          printf 'systemctl reboot\n' >&3
+          second=0
+          for _ in $(seq 1 480); do
+            printf 'echo UP_MARK_2\n' >&3
+            if grep -q "UP_MARK_2" serial.log 2>/dev/null; then
+              second=1
+              break
+            fi
+            if ! kill -0 "$qemu_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+          if [[ $second -ne 1 ]]; then
+            echo "::error::Did not reach a shell after reboot"
+            tail -n 120 serial.log 2>/dev/null || true
+            exit 1
+          fi
+          sleep 10
+          printf 'bootc status\n' >&3
+          sleep 15
+          if grep -q "mheci/vibes:latest" serial.log 2>/dev/null; then
+            echo "OK: upgraded deployment references vibes:latest"
+          else
+            echo "::error::bootc status does not show vibes:latest"
+            tail -n 120 serial.log 2>/dev/null || true
+            exit 1
+          fi
+          kill "$qemu_pid" 2>/dev/null || true
+          kill "$cat_pid" 2>/dev/null || true
+
+      - name: Upload serial log
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: upgrade-serial-log
           path: serial.log
           if-no-files-found: warn
           retention-days: 14

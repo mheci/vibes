@@ -1,0 +1,17 @@
+{
+  "default": [
+    {
+      "type": "insecureAcceptAnything"
+    }
+  ],
+  "transports": {
+    "docker": {
+      "ghcr.io/mheci/vibes": [
+        {
+          "type": "sigstoreSigned",
+          "keyPath": "/etc/pki/containers/vibes-cosign.pub"
+        }
+      ]
+    }
+  }
+}

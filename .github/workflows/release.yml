@@ -53,7 +53,7 @@ jobs:
           echo "Verified ${IMAGE} (${DIGEST}) with cosign.pub"
 
       - name: Generate SBOM for the image
-        uses: anchore/sbom-action@v0.24.0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           image: ghcr.io/${{ github.repository_owner }}/vibes:latest
           artifact-name: vibes-sbom
@@ -68,8 +68,24 @@ jobs:
         with:
           name: vibes-sbom
 
+      - name: Attest SBOM with cosign
+        run: |
+          set -euo pipefail
+          KEY_FILE="$(mktemp)"
+          echo "${{ secrets.SIGNING_SECRET }}" > "${KEY_FILE}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/vibes:latest"
+          SBOM_FILE="$(find "${{ steps.download.outputs.download-path }}" -name '*.spdx.json' | head -n1)"
+          if [[ -z "${SBOM_FILE}" ]]; then
+            echo "::error::SPDX SBOM not found in download path"
+            exit 1
+          fi
+          COSIGN_PASSWORD="" cosign attest --key "${KEY_FILE}" \
+            --type spdx --predicate "${SBOM_FILE}" "${IMAGE}"
+          rm -f "${KEY_FILE}"
+          echo "Attested SBOM for ${IMAGE}"
+
       - name: Create Release
-        uses: softprops/action-gh-release@v3.0.2
+        uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2
         with:
           body: |
             ${{ steps.notes.outputs.notes }}
@@ -79,6 +95,7 @@ jobs:
             - Image: `ghcr.io/${{ github.repository_owner }}/vibes:latest`
             - Digest: `${{ steps.verify.outputs.digest }}`
             - SBOM: attached (`vibes-sbom.spdx.json`)
+            - SBOM attestation: attached to the image with cosign
             - Signature: verified against `cosign.pub` (see [README](README.md))
           files: ${{ steps.download.outputs.download-path }}/*
           generate_release_notes: false

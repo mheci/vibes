@@ -140,7 +140,12 @@ install_available \
 echo "--- Installing desktop integration ---"
 
 install_available \
-  mpv kdeconnectd
+  mpv kdeconnectd libnotify systemd-ukify
+
+echo "--- Installing developer utilities ---"
+
+install_available \
+  bat eza fd-find ripgrep fzf duf bottom
 
 echo "--- Installing chat clients ---"
 
@@ -412,6 +417,46 @@ UNIT
 ln -sf /etc/systemd/system/vibes-selinux.service \
   /etc/systemd/system/multi-user.target.wants/vibes-selinux.service
 echo "vibes-selinux.service enabled"
+
+echo "--- Controlling automatic updates ---"
+
+install -d -m 0755 /etc/systemd/system
+for unit in ublue-update.timer bootc-fetch-apply-updates.timer \
+    flatpak-update.timer updates-stage.timer; do
+  if [[ -e "/usr/lib/systemd/system/${unit}" || -e "/etc/systemd/system/${unit}" ]]; then
+    ln -sf /dev/null "/etc/systemd/system/${unit}"
+    echo "${unit} masked (manual updates)"
+  fi
+done
+
+install -d -m 0755 /usr/lib/systemd/system
+cat >/usr/lib/systemd/system/vibes-update-check.service <<'UNIT'
+[Unit]
+Description=Vibes weekly update check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/vibes-update-check.sh
+UNIT
+
+cat >/usr/lib/systemd/system/vibes-update-check.timer <<'TIMER'
+[Unit]
+Description=Weekly Vibes update notification
+
+[Timer]
+OnCalendar=Mon *-*-* 09:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIMER
+
+install -d -m 0755 /etc/systemd/system/timers.target.wants
+ln -sf /usr/lib/systemd/system/vibes-update-check.timer \
+  /etc/systemd/system/timers.target.wants/vibes-update-check.timer
+echo "vibes-update-check.timer enabled (weekly notification only)"
 
 echo "--- Verifying firewall policy ---"
 

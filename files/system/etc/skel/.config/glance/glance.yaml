@@ -1,0 +1,14 @@
+pages:
+  - name: Overview
+    columns:
+      - size: full
+        widgets:
+          - type: weather
+            location: auto
+          - type: calendar
+          - type: groups
+            groups:
+              - title: Links
+                links:
+                  - title: GitHub
+                    target: https://github.com

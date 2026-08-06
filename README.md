@@ -23,16 +23,16 @@ update quickly.
 | Area | What the image ships |
 | --- | --- |
 | Kernel | CachyOS BORE kernel (COPR), NVIDIA open modules rebuilt in the image, stock kernel removed and version-locked, initramfs generated for the new kernel |
-| Graphics | KDE Plasma on the NVIDIA stack, 100 GiB shader cache, Wayland and VA-API defaults |
+| Graphics | KDE Plasma with variable refresh rate and tearing enabled, 100 GiB shader cache, Wayland and VA-API defaults |
 | Gaming | Steam, Gamescope, MangoHud, proton-cachyos (sha512 verified), Faugus Launcher, LACT, sched-ext schedulers, ananicy-cpp with the CachyOS ruleset |
 | Browsers | Zen Browser, Brave Origin, Helium, with hardware video decoding configured |
 | Messaging | Ferdium (WhatsApp, Telegram, Slack and more), Commet for Matrix, karere, Mailspring, Nicotine+, KDE Connect |
 | Media | Lollypop, Rhythmbox, Fragments, Memento, qBittorrent with the qui web UI, mpv with hardware decode, full ffmpeg and GStreamer codec stack |
-| Development | Zed, VS Code, opencode, T3 Code, Helix, Nix (persistent `/var/nix`), uv, Bun, Deno, Node.js, GitHub CLI, yt-dlp, tmux, zellij |
+| Development | Zed, VS Code, opencode, T3 Code, Helix, Nix (persistent `/var/nix`), uv, Bun, Deno, Node.js, GitHub CLI, yt-dlp, tmux, zellij, bat, eza, fd, ripgrep, fzf, duf, bottom |
 | AI | LM Studio, Vicinae launcher |
 | Virtualization | GNOME Boxes built from the newest upstream source, Pods, DistroShelf, Lobjur (Lobsters and Hacker News client), RustConn |
-| Security | cosign signing, Trivy scanning, sudo-rs, SELinux gaming tuning, GitHub Actions pinned to exact versions |
-| System | PipeWire tuned for voice and gaming, uresourced, nohang, prelockd, tuned with latency-performance, BBR networking, `vjust` command recipes |
+| Security | cosign signing with signature-verified upgrades, Trivy scanning, sudo-rs, SELinux gaming tuning, UKI support, GitHub Actions pinned to exact SHAs |
+| System | PipeWire tuned for voice and gaming, uresourced, nohang, prelockd, tuned with latency-performance, BBR networking, KDE defaults (Breeze Dark, Inter), automatic updates off with a weekly update notification, `vjust` command recipes |
 
 The full list of packages, Flatpaks and extensions lives in
 [`recipes/recipe.yml`](recipes/recipe.yml) and the build scripts under
@@ -67,11 +67,17 @@ Automated builds run daily at 06:00 UTC and on every push to `main`. The
 image is chunked into balanced OCI layers, so updates download only the parts
 that changed since your last version.
 
+Updates are applied manually: the image does not upgrade itself. A weekly
+check (Monday at 09:00) shows a desktop notification when an OS update is
+available, and nothing more happens until you run:
+
 ```bash
-rpm-ostree upgrade
-# or
-bootc upgrade
+sudo bootc upgrade
+systemctl reboot
 ```
+
+Every upgrade is verified against the embedded cosign public key before it
+is applied.
 
 ## Releases
 
