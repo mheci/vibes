@@ -29,7 +29,7 @@ jobs:
         uses: hastd/free-disk-space@68572aeaadb7f76bd408246328e95926323402b5 # v0.1.2
 
       - name: Rebuild recipe with cache disabled
-        uses: blue-build/github-action@v1.12.0
+        uses: blue-build/github-action@836161eb076426a451e6a0054f722b1153b8b3ad # v1.12.0
         with:
           recipe: recipe.yml
           cosign_private_key: ${{ secrets.SIGNING_SECRET || '' }}

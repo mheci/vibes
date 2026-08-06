@@ -50,9 +50,23 @@ jobs:
         # size in transient storage (ostree repo + new layers) and overflows
         # even that. Purge unconditionally before the build starts.
         uses: hastd/free-disk-space@68572aeaadb7f76bd408246328e95926323402b5 # v0.1.2
+      - name: Save previous image tag
+        if: env.SIGNING_KEY != '' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          IMG="ghcr.io/${{ github.repository_owner }}/vibes"
+          echo "${{ github.token }}" | podman login ghcr.io -u x-access-token --password-stdin >/dev/null 2>&1
+          if podman manifest inspect "${IMG}:latest" >/dev/null 2>&1; then
+            podman pull "${IMG}:latest"
+            podman tag "${IMG}:latest" "${IMG}:previous"
+            podman push "${IMG}:previous"
+            echo "Saved current :latest as :previous"
+          else
+            echo "No existing :latest image, skipping"
+          fi
       - name: Build Custom Image
         if: env.SIGNING_KEY != ''
-        uses: blue-build/github-action@v1.12.0
+        uses: blue-build/github-action@836161eb076426a451e6a0054f722b1153b8b3ad # v1.12.0
         with:
           recipe: ${{ matrix.recipe }}
           cosign_private_key: ${{ secrets.SIGNING_SECRET || '' }}

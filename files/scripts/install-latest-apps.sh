@@ -562,13 +562,13 @@ fi
 rm -rf /tmp/commet /tmp/commet-extract /tmp/commet.tar.gz
 
 echo "Installing CachyOS ananicy rules..."
-ANANICY_PIN="489dd6c929d17e4f6a374746ebfce9fa7bd5a3d1"
+ANANICY_TAG="1.1.47"
 rm -rf /tmp/ananicy-rules
 install -d -m 0755 /tmp/ananicy-rules
 git -C /tmp/ananicy-rules init -q
 git -C /tmp/ananicy-rules remote add origin \
   https://github.com/CachyOS/ananicy-rules.git
-retry git -C /tmp/ananicy-rules fetch -q --depth 1 origin "${ANANICY_PIN}"
+retry git -C /tmp/ananicy-rules fetch -q --depth 1 origin "refs/tags/${ANANICY_TAG}"
 git -C /tmp/ananicy-rules checkout -q FETCH_HEAD
 install -d -m 0755 /etc/ananicy.d
 cp -a /tmp/ananicy-rules/00-default /etc/ananicy.d/
@@ -730,6 +730,10 @@ check_file /etc/systemd/system/vibes-selinux.service
 check_file /etc/systemd/system/multi-user.target.wants/vibes-selinux.service
 
 for cmd in uv hx yt-dlp gh zoxide bun deno t3code; do
+  check_command "$cmd"
+done
+
+for cmd in eza bat fd rg fzf duf btm; do
   check_command "$cmd"
 done
 

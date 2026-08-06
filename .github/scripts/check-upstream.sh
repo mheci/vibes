@@ -101,6 +101,9 @@ echo "== Pinned GitHub tags =="
 github_tag_exists "werman/noise-suppression-for-voice" "v1.10"
 github_tag_exists "autobrr/qui" "v1.23.0"
 github_tag_exists "ful1e5/apple_cursor" "v2.0.0"
+github_tag_exists "sched-ext/scx" "v1.1.2"
+github_tag_exists "sched-ext/scx-loader" "v1.1.2"
+github_tag_exists "CachyOS/ananicy-rules" "1.1.47"
 
 echo
 echo "== Pinned commits =="
@@ -108,7 +111,10 @@ github_commit_exists "oracle/bpftune" "4712347f2da0b7d4a5fbdb0d81d071c1704b3f20"
 github_commit_exists "somepaulo/MoreWaita" "53bc2ba9c2cdc1f26ef822fcdd8a95e01cce5d58"
 github_commit_exists "hakavlad/nohang" "5938a2e2249cb93ff21094dd548f770c47cc1860"
 github_commit_exists "hakavlad/prelockd" "584f70ac05b403237a12193f1e70380b283d4083"
-github_commit_exists "CachyOS/ananicy-rules" "489dd6c929d17e4f6a374746ebfce9fa7bd5a3d1"
+
+echo
+echo "== Pinned GitLab tags =="
+check_url "https://gitlab.gnome.org/GNOME/gnome-boxes/-/tags/50.0"
 
 echo
 echo "== Kernel and scheduler sources =="
