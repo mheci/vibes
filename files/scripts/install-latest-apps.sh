@@ -528,6 +528,20 @@ fi
 install -Dm755 "${glance_bin}" /usr/local/bin/glance
 rm -rf /tmp/glance-x /tmp/glance.tar.gz
 
+echo "Installing bottom..."
+retry curl -fL --retry 4 --retry-delay 10 -o /tmp/bottom.tar.gz \
+  "$(gh_latest_asset_url "ClementTsang/bottom" 'bottom_x86_64-unknown-linux-gnu\.tar\.gz$')"
+rm -rf /tmp/bottom-x
+mkdir -p /tmp/bottom-x
+tar -xzf /tmp/bottom.tar.gz -C /tmp/bottom-x
+btm_bin="$(find /tmp/bottom-x -type f -name btm -perm -111 | head -n1)"
+if [[ -z "${btm_bin}" ]]; then
+  echo "ERROR: btm binary not found in release tarball" >&2
+  exit 1
+fi
+install -Dm755 "${btm_bin}" /usr/local/bin/btm
+rm -rf /tmp/bottom-x /tmp/bottom.tar.gz
+
 echo "Installing Commet..."
 COMMET_URL="$(gh_latest_asset_url "commetchat/commet" \
   'commet-linux-portable-x64\.tar\.gz$')"

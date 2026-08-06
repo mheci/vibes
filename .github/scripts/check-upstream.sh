@@ -146,6 +146,7 @@ latest_asset_matches "ferdium/ferdium-app" "Ferdium-linux-.*-x86_64\\.rpm$" "fer
 latest_asset_matches "vicinaehq/vicinae" "Vicinae-x86_64\\.AppImage$" "vicinae launcher"
 latest_asset_matches "zellij-org/zellij" "zellij-x86_64-unknown-linux-musl\\.tar\\.gz$" "zellij"
 latest_asset_matches "glanceapp/glance" "glance-linux-amd64\\.tar\\.gz$" "glance"
+latest_asset_matches "ClementTsang/bottom" "bottom_x86_64-unknown-linux-gnu\\.tar\\.gz$" "bottom"
 latest_asset_matches "autobrr/qui" "linux_x86_64\\.tar\\.gz$" "qui"
 latest_asset_matches "pingdotgg/t3code" "T3-Code-[0-9.]+-x86_64\\.AppImage$" "t3code editor"
 latest_asset_matches "oven-sh/bun" "bun-linux-x64\\.zip$" "bun runtime"

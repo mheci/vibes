@@ -145,7 +145,7 @@ install_available \
 echo "--- Installing developer utilities ---"
 
 install_available \
-  bat eza fd-find ripgrep fzf duf bottom
+  bat eza fd-find ripgrep fzf duf
 
 echo "--- Installing chat clients ---"
 
