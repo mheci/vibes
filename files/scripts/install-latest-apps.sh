@@ -759,11 +759,18 @@ done
 for cmd in nautilus gnome-disks dolphin; do
   check_command "$cmd"
 done
-if rpm -q gvfs-mtp >/dev/null 2>&1; then
-  echo "  OK: gvfs-mtp (rpm)"
-else
-  echo "  FAIL: gvfs-mtp not installed" >&2
-  errors=$((errors + 1))
+gvfs_backends=0
+for gvfs_pkg in gvfs gvfs-mtp gvfs-smb gvfs-afp gvfs-archive gvfs-fuse \
+    gvfs-nfs gvfs-goa gvfs-gphoto2; do
+  if rpm -q "${gvfs_pkg}" >/dev/null 2>&1; then
+    gvfs_backends=$((gvfs_backends + 1))
+  else
+    echo "  FAIL: ${gvfs_pkg} not installed" >&2
+    errors=$((errors + 1))
+  fi
+done
+if [[ ${gvfs_backends} -ge 5 ]]; then
+  echo "  OK: ${gvfs_backends} GVFS backends installed"
 fi
 
 check_file /etc/ananicy.d/ananicy.conf

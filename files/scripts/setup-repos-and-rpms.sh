@@ -141,7 +141,8 @@ echo "--- Installing desktop integration ---"
 
 install_available \
   mpv kdeconnectd libnotify systemd-ukify \
-  nautilus gvfs gvfs-mtp gnome-disk-utility dolphin
+  nautilus gvfs gvfs-mtp gvfs-smb gvfs-afp gvfs-archive gvfs-fuse \
+  gvfs-nfs gvfs-goa gvfs-gphoto2 gnome-disk-utility dolphin
 
 echo "--- Installing developer utilities ---"
 
