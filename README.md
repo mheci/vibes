@@ -2,11 +2,10 @@
 
 <p align="center"><img src="assets/vibes-mascot.svg" width="160" alt="Vibes mascot"></p>
 
-Vibes is a GNOME workstation image made for gaming, creating and developing
-on NVIDIA hardware. It is built on top of Bluefin (NVIDIA Open) with
-BlueBuild, and it ships the CachyOS BORE kernel with NVIDIA open drivers
-rebuilt for it, plus a curated set of games, browsers, chat apps and developer
-tools.
+Vibes is a GNOME workstation image for NVIDIA hardware. It layers the
+CachyOS BORE kernel with in-image NVIDIA driver builds, a curated toolset and
+quiet system tuning onto Bluefin, and publishes signed, chunked images that
+update quickly.
 
 **Base image:** `ghcr.io/ublue-os/bluefin-nvidia-open:latest`
 **Output image:** `ghcr.io/mheci/vibes:latest`
@@ -19,83 +18,25 @@ tools.
 [![reproducibility](https://github.com/mheci/vibes/actions/workflows/reproducibility.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/reproducibility.yml)
 [![upstream-health](https://github.com/mheci/vibes/actions/workflows/upstream-health.yml/badge.svg)](https://github.com/mheci/vibes/actions/workflows/upstream-health.yml)
 
-## What You Get
+## Highlights
 
-### Gaming
+| Area | What the image ships |
+| --- | --- |
+| Kernel | CachyOS BORE kernel (COPR), NVIDIA open modules rebuilt in the image, stock kernel removed and version-locked, initramfs generated for the new kernel |
+| Graphics | Custom mutter build with tearing and variable refresh rate, 100 GiB shader cache, Wayland and VA-API defaults |
+| Gaming | Steam, Gamescope, MangoHud, proton-cachyos (sha512 verified), Faugus Launcher, LACT, sched-ext schedulers, ananicy-cpp with the CachyOS ruleset |
+| Browsers | Zen Browser, Brave Origin, Helium, with hardware video decoding configured |
+| Messaging | Ferdium (WhatsApp, Telegram, Slack and more), Commet for Matrix, karere, Mailspring, Nicotine+, GSConnect |
+| Media | Lollypop, Rhythmbox, Fragments, Memento, qBittorrent with the qui web UI, mpv with hardware decode, full ffmpeg and GStreamer codec stack |
+| Development | Zed, VS Code, opencode, T3 Code, Helix, Nix (persistent `/var/nix`), uv, Bun, Deno, Node.js, GitHub CLI, yt-dlp, tmux, zellij |
+| AI | LM Studio, Vicinae launcher with its GNOME extension |
+| Virtualization | GNOME Boxes built from the newest upstream source, Pods, DistroShelf, Lobjur (Lobsters and Hacker News client), RustConn |
+| Security | cosign signing, Trivy scanning, sudo-rs, SELinux gaming tuning, GitHub Actions pinned to exact versions |
+| System | PipeWire tuned for voice and gaming, uresourced, nohang, prelockd, tuned with latency-performance, BBR networking, `vjust` command recipes |
 
-- CachyOS BORE kernel from the official Fedora COPR, with NVIDIA open kernel
-  modules rebuilt in the image to match it.
-- Steam, Gamescope and MangoHud.
-- proton-cachyos installed as the system-wide Steam compatibility tool
-  (sha512 verified against the upstream release).
-- Faugus Launcher for running Windows games through Wine and Proton.
-- LACT for GPU overclocking and fan control.
-- sched-ext schedulers (scx_lavd in Gaming mode) and ananicy-cpp for smooth
-  desktop response.
-- A custom mutter build that adds desktop tearing and variable refresh rate.
-- A 100 GiB NVIDIA shader disk cache so games do not stutter while
-  recompiling shaders.
-
-### Browsers
-
-- Zen Browser, Brave Origin and Helium, all from official or maintained
-  sources.
-- Hardware video decoding is configured for every browser, including on
-  NVIDIA.
-- Firefox is not included.
-
-### Chat and Social
-
-- Ferdium, one app for WhatsApp, Telegram, Slack and more, from the official
-  release RPM.
-- Element for Matrix, always the newest desktop build.
-- karere (WhatsApp Web, Flatpak), Mailspring and Nicotine+.
-- GSConnect for phone-to-desktop integration.
-
-### Media
-
-- Lollypop and Rhythmbox for music.
-- Fragments for torrents.
-- Memento to track movies and TV shows you watched.
-- mpv with hardware decode, plus the full ffmpeg and GStreamer codec stack.
-
-### Development and AI
-
-- Zed, VS Code, opencode CLI and desktop app, T3 Code and Helix.
-- Nix (Determinate Systems installer) with the store in persistent
-  `/var/nix`, a socket-activated daemon and SELinux policy at first boot.
-- uv, Bun, Deno, Node.js, GitHub CLI, yt-dlp, zoxide and just.
-- tmux and zellij for terminal sessions.
-- LM Studio for local LLMs, plus the Vicinae launcher with its GNOME
-  extension.
-- bpftune, a BPF-based system tuning daemon.
-
-### Virtualization
-
-- GNOME Boxes, built from the newest upstream source at image build time, for
-  running virtual machines.
-- Pods, DistroShelf, Lobjur and RustConn as Flatpaks for containers and
-  remote connections.
-
-### Under the Hood
-
-- PipeWire tuned for gaming and voice: fixed 48 kHz, realtime scheduling,
-  RNNoise noise suppression and high-quality Bluetooth codecs.
-- NVIDIA acceleration defaults for Wayland and video, and persistent cache
-  paths for every toolkit.
-- Memory management with uresourced, low-memory-monitor (warn only), nohang
-  and prelockd.
-- Power management with tuned and tuned-ppd, defaulting to the
-  latency-performance profile.
-- Quiet system tuning: BBR networking, gaming memory limits, capped logs.
-- `vjust`, a just command runner with recipes for system, TPM, LUKS, gaming,
-  NVIDIA, Flatpak, Nix and audio tasks.
-
-```bash
-vjust          # list all recipes
-vjust sched-set scx_bpfland
-vjust tpm-status
-```
+The full list of packages, Flatpaks and extensions lives in
+[`recipes/recipe.yml`](recipes/recipe.yml) and the build scripts under
+[`files/scripts`](files/scripts).
 
 ## Getting Started
 

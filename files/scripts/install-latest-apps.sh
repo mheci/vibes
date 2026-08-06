@@ -672,43 +672,63 @@ install -Dm755 "${glance_bin}" /usr/local/bin/glance
 rm -rf /tmp/glance-x /tmp/glance.tar.gz
 
 # ---------------------------------------------------------------------------
-# Element Desktop (Matrix client). The desktop app source lives in
-# element-hq/element-web (apps/desktop); upstream publishes the current
-# build as a portable tarball at packages.element.io (the "element-desktop"
-# name is a rolling pointer to the newest release, currently 1.12.x).
-# Extracted to /usr/lib/element-desktop and wired into the menu.
+# Commet (Matrix client). The Linux portable build is published on GitHub
+# Releases as a Flutter bundle; extracted to /usr/lib/commet and wired into
+# the menu.
 # ---------------------------------------------------------------------------
-echo "Installing Element Desktop..."
-ELEMENT_URL="https://packages.element.io/desktop/install/linux/glibc-x86-64/element-desktop.tar.gz"
-rm -rf /tmp/element-desktop /tmp/element-extract
-retry curl -fL --retry 4 --retry-delay 10 -o /tmp/element-desktop.tar.gz "${ELEMENT_URL}"
-mkdir -p /tmp/element-extract
-tar -xzf /tmp/element-desktop.tar.gz -C /tmp/element-extract --strip-components=1
-element_bin="$(find /tmp/element-extract -type f -name element-desktop -perm -111 | head -n1)"
-if [[ -z "${element_bin}" ]]; then
-  echo "ERROR: element-desktop binary not found in tarball" >&2
+echo "Installing Commet..."
+COMMET_URL="$(gh_latest_asset_url "commetchat/commet" \
+  'commet-linux-portable-x64\.tar\.gz$')"
+rm -rf /tmp/commet /tmp/commet-extract
+retry curl -fL --retry 4 --retry-delay 10 -o /tmp/commet.tar.gz "${COMMET_URL}"
+mkdir -p /tmp/commet-extract
+tar -xzf /tmp/commet.tar.gz -C /tmp/commet-extract --strip-components=1
+commet_bin="$(find /tmp/commet-extract -type f -name commet -perm -111 | head -n1)"
+if [[ -z "${commet_bin}" ]]; then
+  echo "ERROR: commet binary not found in tarball" >&2
   exit 1
 fi
-install -d -m 0755 /usr/lib/element-desktop
-cp -a /tmp/element-extract/. /usr/lib/element-desktop/
-ln -sf /usr/lib/element-desktop/element-desktop /usr/bin/element-desktop
-cat >/usr/share/applications/element-desktop.desktop <<'ELEMENTDESKTOP'
+install -d -m 0755 /usr/lib/commet
+cp -a /tmp/commet-extract/. /usr/lib/commet/
+ln -sf /usr/lib/commet/commet /usr/bin/commet
+cat >/usr/share/applications/commet.desktop <<'COMMETDESKTOP'
 [Desktop Entry]
-Name=Element
-Comment=Secure messaging and collaboration with Matrix
-Exec=/usr/bin/element-desktop %U
+Name=Commet
+Comment=Chat with Matrix
+Exec=/usr/bin/commet %U
 Terminal=false
 Type=Application
 Categories=Network;InstantMessaging;Chat;
-MimeType=x-scheme-handler/element;
+MimeType=x-scheme-handler/commet;
 StartupNotify=true
-ELEMENTDESKTOP
-element_icon="$(find /usr/lib/element-desktop -type f -name 'icon.png' | head -n1)"
-if [[ -n "${element_icon}" ]]; then
+COMMETDESKTOP
+commet_icon="$(find /usr/lib/commet -type f -name 'app_icon_rounded.png' | head -n1)"
+if [[ -n "${commet_icon}" ]]; then
   install -d -m 0755 /usr/share/icons/hicolor/512x512/apps
-  install -m 0644 "${element_icon}" /usr/share/icons/hicolor/512x512/apps/element-desktop.png
+  install -m 0644 "${commet_icon}" /usr/share/icons/hicolor/512x512/apps/commet.png
 fi
-rm -rf /tmp/element-desktop /tmp/element-extract /tmp/element-desktop.tar.gz
+rm -rf /tmp/commet /tmp/commet-extract /tmp/commet.tar.gz
+
+# ---------------------------------------------------------------------------
+# ananicy-cpp rules (CachyOS). ananicy-cpp is installed from Fedora; this
+# ruleset adds game, browser and desktop rules maintained by CachyOS and the
+# community. Installed into /etc/ananicy.d where the daemon reads them,
+# pinned to an exact upstream commit.
+# ---------------------------------------------------------------------------
+echo "Installing CachyOS ananicy rules..."
+ANANICY_PIN="489dd6c929d17e4f6a374746ebfce9fa7bd5a3d1"
+rm -rf /tmp/ananicy-rules
+install -d -m 0755 /tmp/ananicy-rules
+git -C /tmp/ananicy-rules init -q
+git -C /tmp/ananicy-rules remote add origin \
+  https://github.com/CachyOS/ananicy-rules.git
+retry git -C /tmp/ananicy-rules fetch -q --depth 1 origin "${ANANICY_PIN}"
+git -C /tmp/ananicy-rules checkout -q FETCH_HEAD
+install -d -m 0755 /etc/ananicy.d
+cp -a /tmp/ananicy-rules/00-default /etc/ananicy.d/
+cp -a /tmp/ananicy-rules/00-cgroups.cgroups /tmp/ananicy-rules/00-types.types \
+  /tmp/ananicy-rules/ananicy.conf /etc/ananicy.d/
+rm -rf /tmp/ananicy-rules
 
 # ---------------------------------------------------------------------------
 # Vicinae GNOME extension (clipboard and window-management APIs for the
@@ -942,9 +962,19 @@ done
 
 # Terminal tooling, media apps and utilities added to the image.
 for cmd in tmux zellij lollypop rhythmbox fragments trivy \
-    element-desktop glance; do
+    commet qbittorrent glance; do
   check_command "$cmd"
 done
+
+# CachyOS ananicy rules installed for the ananicy-cpp daemon.
+check_file /etc/ananicy.d/ananicy.conf
+check_file /etc/ananicy.d/00-types.types
+if [[ -d /etc/ananicy.d/00-default ]]; then
+  echo "  OK: /etc/ananicy.d/00-default rules"
+else
+  echo "  FAIL: /etc/ananicy.d/00-default rules not found" >&2
+  errors=$((errors + 1))
+fi
 
 # Vicinae GNOME extension installed system-wide.
 check_file /usr/share/gnome-shell/extensions/vicinae@dagimg-dot/metadata.json

@@ -115,6 +115,7 @@ github_commit_exists "oracle/bpftune" "4712347f2da0b7d4a5fbdb0d81d071c1704b3f20"
 github_commit_exists "somepaulo/MoreWaita" "53bc2ba9c2cdc1f26ef822fcdd8a95e01cce5d58"
 github_commit_exists "hakavlad/nohang" "5938a2e2249cb93ff21094dd548f770c47cc1860"
 github_commit_exists "hakavlad/prelockd" "584f70ac05b403237a12193f1e70380b283d4083"
+github_commit_exists "CachyOS/ananicy-rules" "489dd6c929d17e4f6a374746ebfce9fa7bd5a3d1"
 
 echo
 echo "== Kernel and scheduler sources =="
@@ -143,7 +144,7 @@ check_url "https://github.com/sched-ext/scx/tags.atom"
 
 echo
 echo "== Element Desktop download channel =="
-check_url "https://packages.element.io/desktop/install/linux/glibc-x86-64/element-desktop.tar.gz"
+latest_asset_matches "commetchat/commet" "commet-linux-portable-x64\\.tar\\.gz$" "commet"
 check_url "https://gitlab.gnome.org/GNOME/gnome-boxes/-/raw/main/meson.build"
 
 echo

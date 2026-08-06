@@ -64,7 +64,7 @@ modules:
           - io.github.dimtpap.coppwr
           # DistroShelf: graphical interface for managing Distrobox containers
           - com.ranfdev.DistroShelf
-          # Lobjur: Linux distribution deployment and management utility
+          # Lobjur: native Lobsters and Hacker News client
           - com.ranfdev.Lobjur
           # adw-gtk: GTK3 theme matching libadwaita (light/dark/black variants
           # are all shipped inside this single theme package)
