@@ -224,7 +224,7 @@ install_available \
   gamescope \
   ananicy-cpp \
   faugus-launcher \
-  tmux lollypop rhythmbox fragments
+  tmux lollypop rhythmbox fragments qbittorrent
 
 # =============================================================================
 # GNOME desktop additions

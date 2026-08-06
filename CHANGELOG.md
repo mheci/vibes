@@ -9,8 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Ferdium messaging client from the official release RPM, replacing Whatsie.
-- Element Desktop (Matrix client), newest official build.
-- tmux, zellij, Lollypop, Rhythmbox, Fragments, Glance and Memento.
+- Commet (Matrix client), newest portable build, replacing Element.
+- CachyOS ananicy rules for the ananicy-cpp daemon.
+- tmux, zellij, Lollypop, Rhythmbox, Fragments, qBittorrent and the qui web
+  UI, Glance and Memento.
 - GNOME Boxes built from the newest upstream source at image build time.
 - Vicinae launcher GNOME extension, installed system-wide.
 - Trivy vulnerability scanner in the image and as CI scans.
@@ -18,6 +20,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Removed
 
-- Whatsie and Hermes Agent.
-- Firefox (RPM and Flatpak).
+- Whatsie, Hermes Agent, Element and Firefox (RPM and Flatpak).
 - Build toolchains are stripped from the finished image after compilation.
