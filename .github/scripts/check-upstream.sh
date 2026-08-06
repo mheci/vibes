@@ -101,8 +101,6 @@ echo "== Pinned GitHub tags =="
 github_tag_exists "werman/noise-suppression-for-voice" "v1.10"
 github_tag_exists "autobrr/qui" "v1.23.0"
 github_tag_exists "ful1e5/apple_cursor" "v2.0.0"
-github_tag_exists "sched-ext/scx" "v1.1.2"
-github_tag_exists "sched-ext/scx-loader" "v1.1.2"
 github_tag_exists "CachyOS/ananicy-rules" "1.1.47"
 
 echo

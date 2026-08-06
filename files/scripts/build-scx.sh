@@ -22,15 +22,13 @@ for pkg in scx-scheds scx-tools-git; do
   fi
 done
 
-echo "--- Cloning sched-ext/scx (v1.1.2) ---"
+echo "--- Cloning sched-ext/scx (master) ---"
 
-SCX_TAG="v1.1.2"
 SCX_COMMIT=""
 rm -rf /tmp/scx /tmp/scx-cargo
-retry git clone --depth 1 --branch "${SCX_TAG}" \
-  https://github.com/sched-ext/scx.git /tmp/scx
+retry git clone --depth 1 https://github.com/sched-ext/scx.git /tmp/scx
 SCX_COMMIT="$(git -C /tmp/scx rev-parse --short HEAD)"
-echo "scx tag: ${SCX_TAG} (${SCX_COMMIT})"
+echo "scx master commit: ${SCX_COMMIT}"
 
 echo "--- Building scx schedulers (cargo, release) ---"
 export CARGO_HOME=/tmp/scx-cargo
@@ -52,15 +50,13 @@ echo "--- Installing scx binaries ---"
 find target/release -maxdepth 1 -type f -executable ! -name '*.so' \
   -exec install -Dm755 -t /usr/bin {} +
 
-echo "--- Building scx_loader/scxctl/scxtui (sched-ext/scx-loader) ---"
+echo "--- Building scx_loader/scxctl/scxtui (sched-ext/scx-loader, master) ---"
 
-SCX_LOADER_TAG="v1.1.2"
 SCX_LOADER_COMMIT=""
 rm -rf /tmp/scx-loader
-retry git clone --depth 1 --branch "${SCX_LOADER_TAG}" \
-  https://github.com/sched-ext/scx-loader.git /tmp/scx-loader
+retry git clone --depth 1 https://github.com/sched-ext/scx-loader.git /tmp/scx-loader
 SCX_LOADER_COMMIT="$(git -C /tmp/scx-loader rev-parse --short HEAD)"
-echo "scx-loader tag: ${SCX_LOADER_TAG} (${SCX_LOADER_COMMIT})"
+echo "scx-loader master commit: ${SCX_LOADER_COMMIT}"
 
 cd /tmp/scx-loader
 retry cargo build --release
