@@ -29,9 +29,7 @@ else
   echo "  FAIL: scx-manager binary not found" >&2
   errors=$((errors + 1))
 fi
-if [[ -f /usr/share/applications/scx-manager.desktop || \
-    -f /usr/share/applications/org.scx.Manager.desktop || \
-    -f /usr/share/applications/scxctl-ui.desktop ]]; then
+if [[ -f /usr/share/applications/org.cachyos.scx-manager.desktop ]]; then
   echo "  OK: scx-manager desktop entry"
 else
   echo "  FAIL: scx-manager desktop entry not found" >&2
