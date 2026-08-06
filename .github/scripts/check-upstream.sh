@@ -113,17 +113,6 @@ github_commit_exists "hakavlad/prelockd" "584f70ac05b403237a12193f1e70380b283d40
 echo
 echo "== Pinned GitLab tags =="
 check_url "https://gitlab.gnome.org/GNOME/gnome-boxes/-/tags/50.0"
-check_url "https://gitlab.com/evlaV/steamdeck-kde-presets/-/archive/0.30/steamdeck-kde-presets-0.30.tar.gz"
-check_url "https://gitlab.com/jomada/marge"
-check_url "https://gitlab.com/jomada/Scratchy"
-github_commit_exists "vinceliuice/Graphite-kde-theme" "09665ba967475da01ad9ec2a5a5822f15ba14e84"
-github_commit_exists "vinceliuice/WhiteSur-kde" "1e4d960945572d05a3d96bec5253dd83971239f2"
-github_commit_exists "vinceliuice/McMojave-kde" "a1745e9c35d57c6db7e298180dba53ac4a70fee9"
-github_commit_exists "vinceliuice/Tela-circle-icon-theme" "c0adf1ab92f564e3b83540441921f26d121b09c3"
-github_commit_exists "vinceliuice/WhiteSur-icon-theme" "c5c8ee5588cf8640dbe25838fa62b43c81c45a33"
-github_commit_exists "Bali10050/Darkly" "11c27e2d98025f4d4c1598f07a185280b36f35f7"
-github_commit_exists "L4ki/BonaFides-Plasma-Themes" "97d4fe35e5c6d925b9f723f5411a42880fe41298"
-github_commit_exists "gxanshu/macos-bigsur-sound-theme-linux" "88275891dc8ce9c14f69431eddbb3d04d5069e53"
 github_commit_exists "CachyOS/scx-manager" "af37c3e7bbffa6b259c3d0aec88da33c6e0062b0"
 github_commit_exists "ekaaty/klassy" "800e71ce2bbd0824a0a687484222611acd5dc4ad"
 

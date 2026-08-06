@@ -14,10 +14,6 @@ modules:
 
   - type: script
     scripts:
-      - setup-kde-themes.sh
-
-  - type: script
-    scripts:
       - setup-cachyos-kernel.sh
 
   - type: script
