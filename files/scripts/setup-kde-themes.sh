@@ -29,7 +29,8 @@ copy_if_exists() {
 }
 
 install_kde_theme_repo() {
-  local name="$1" url="$2" sha="$3" dir="/tmp/theme-${name}"
+  local name="$1" url="$2" sha="$3"
+  local dir="/tmp/theme-${name}"
   echo "--- ${name} ---"
   clone_pinned "${url}" "${sha}" "${dir}"
   copy_if_exists "${dir}/aurorae" /usr/share/aurorae/themes
@@ -48,7 +49,8 @@ install_kde_theme_repo() {
 }
 
 install_icon_repo() {
-  local name="$1" url="$2" sha="$3" pattern="$4" dir="/tmp/theme-${name}"
+  local name="$1" url="$2" sha="$3" pattern="$4"
+  local dir="/tmp/theme-${name}"
   echo "--- ${name} (icons) ---"
   clone_pinned "${url}" "${sha}" "${dir}"
   for theme_dir in "${dir}"/${pattern}; do
