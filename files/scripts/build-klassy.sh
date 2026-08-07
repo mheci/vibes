@@ -10,6 +10,12 @@ echo "=== Building Klassy from master ==="
 install_available cmake ninja-build extra-cmake-modules gettext
 retry "${DNF[@]}" install --skip-unavailable --skip-broken \
   "cmake(ECM)" \
+  "cmake(Qt5Widgets)" "cmake(Qt5DBus)" "cmake(Qt5Quick)" \
+  "cmake(Qt5X11Extras)" "cmake(Qt5Svg)" "cmake(Qt5Xml)" \
+  "cmake(KF5Config)" "cmake(KF5CoreAddons)" "cmake(KF5GuiAddons)" \
+  "cmake(KF5I18n)" "cmake(KF5WindowSystem)" \
+  "cmake(KF5FrameworkIntegration)" "cmake(KF5IconThemes)" \
+  "cmake(KF5ConfigWidgets)" "cmake(KF5Kirigami2)" "cmake(KF5Style)" \
   "cmake(Qt6Core)" "cmake(Qt6DBus)" "cmake(Qt6Quick)" "cmake(Qt6Svg)" \
   "cmake(Qt6Widgets)" "cmake(Qt6Xml)" \
   "cmake(KF6Config)" "cmake(KF6CoreAddons)" "cmake(KF6GuiAddons)" \

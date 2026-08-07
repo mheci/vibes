@@ -28,8 +28,9 @@ for pkg in "${STRIP_PKGS[@]}"; do
   fi
 done
 
-for pattern in 'qt6-*-devel' 'kf6-*-devel' 'kdecoration*-devel' \
-    'kwin*-devel' 'polkit-qt6-*-devel' 'extra-cmake-modules' 'gettext'; do
+for pattern in 'qt5-*-devel' 'qt6-*-devel' 'kf5-*-devel' 'kf6-*-devel' \
+    'kdecoration*-devel' 'kwin*-devel' 'polkit-qt6-*-devel' \
+    'extra-cmake-modules' 'gettext'; do
   for pkg in $(rpm -qa "${pattern}" 2>/dev/null); do
     "${DNF[@]}" remove --noautoremove "${pkg}" >/dev/null 2>&1 || true
   done
