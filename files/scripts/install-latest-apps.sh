@@ -115,6 +115,9 @@ install_latest_rpm "Foundry376/Mailspring" 'mailspring-.*\.x86_64\.rpm$' "mailsp
 
 install_latest_rpm "ferdium/ferdium-app" 'Ferdium-linux-.*-x86_64\.rpm$' "ferdium"
 
+# Sniffnet: network monitoring and analysis tool (official release RPM)
+install_latest_rpm "GyulyVGC/sniffnet" 'Sniffnet_LinuxRPM_x86_64\.rpm$' "sniffnet"
+
 echo "Installing proton-cachyos..."
 compat_dir="/usr/share/steam/compatibilitytools.d/proton-cachyos"
 install -d -m 0755 /tmp/proton-cachyos "${compat_dir%/proton-cachyos}"
@@ -752,9 +755,26 @@ for cmd in eza bat fd rg fzf duf btm; do
 done
 
 for cmd in tmux zellij lollypop rhythmbox fragments trivy \
-    commet qbittorrent glance; do
+    commet qbittorrent glance sniffnet; do
   check_command "$cmd"
 done
+
+for cmd in nautilus gnome-disks dolphin; do
+  check_command "$cmd"
+done
+gvfs_backends=0
+for gvfs_pkg in gvfs gvfs-mtp gvfs-smb gvfs-afp gvfs-archive gvfs-fuse \
+    gvfs-nfs gvfs-goa gvfs-gphoto2; do
+  if rpm -q "${gvfs_pkg}" >/dev/null 2>&1; then
+    gvfs_backends=$((gvfs_backends + 1))
+  else
+    echo "  FAIL: ${gvfs_pkg} not installed" >&2
+    errors=$((errors + 1))
+  fi
+done
+if [[ ${gvfs_backends} -ge 5 ]]; then
+  echo "  OK: ${gvfs_backends} GVFS backends installed"
+fi
 
 check_file /etc/ananicy.d/ananicy.conf
 check_file /etc/ananicy.d/00-types.types

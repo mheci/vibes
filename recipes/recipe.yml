@@ -30,6 +30,14 @@ modules:
 
   - type: script
     scripts:
+      - build-scx-manager.sh
+
+  - type: script
+    scripts:
+      - build-klassy.sh
+
+  - type: script
+    scripts:
       - install-latest-apps.sh
 
   - type: script

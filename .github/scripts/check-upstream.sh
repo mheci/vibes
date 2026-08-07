@@ -113,6 +113,8 @@ github_commit_exists "hakavlad/prelockd" "584f70ac05b403237a12193f1e70380b283d40
 echo
 echo "== Pinned GitLab tags =="
 check_url "https://gitlab.gnome.org/GNOME/gnome-boxes/-/tags/50.0"
+github_commit_exists "CachyOS/scx-manager" "af37c3e7bbffa6b259c3d0aec88da33c6e0062b0"
+github_commit_exists "ekaaty/klassy" "800e71ce2bbd0824a0a687484222611acd5dc4ad"
 
 echo
 echo "== Kernel and scheduler sources =="
@@ -143,6 +145,7 @@ echo "== Latest-release asset patterns used by scripts =="
 latest_asset_matches "anomalyco/opencode" "opencode-desktop-linux-x86_64\\.rpm$" "opencode desktop RPM"
 latest_asset_matches "Foundry376/Mailspring" "mailspring-.*\\.x86_64\\.rpm$" "mailspring"
 latest_asset_matches "ferdium/ferdium-app" "Ferdium-linux-.*-x86_64\\.rpm$" "ferdium"
+latest_asset_matches "GyulyVGC/sniffnet" "Sniffnet_LinuxRPM_x86_64\\.rpm$" "sniffnet"
 latest_asset_matches "vicinaehq/vicinae" "Vicinae-x86_64\\.AppImage$" "vicinae launcher"
 latest_asset_matches "zellij-org/zellij" "zellij-x86_64-unknown-linux-musl\\.tar\\.gz$" "zellij"
 latest_asset_matches "glanceapp/glance" "glance-linux-amd64\\.tar\\.gz$" "glance"
