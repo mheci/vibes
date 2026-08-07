@@ -23,11 +23,13 @@ update quickly.
 | Area | What the image ships |
 | --- | --- |
 | Kernel | CachyOS BORE kernel (COPR), NVIDIA open modules rebuilt in the image, stock kernel removed and version-locked, initramfs generated for the new kernel |
-| Graphics | KDE Plasma with variable refresh rate and tearing enabled, 100 GiB shader cache, Wayland and VA-API defaults |
-| Gaming | Steam, Gamescope, MangoHud, proton-cachyos (sha512 verified), Faugus Launcher, LACT, sched-ext schedulers, ananicy-cpp with the CachyOS ruleset |
+| Graphics | KDE Plasma with variable refresh rate and tearing enabled, Klassy window decorations, 100 GiB shader cache, Wayland and VA-API defaults |
+| Gaming | Steam, Gamescope (with CAP_SYS_NICE), MangoHud, proton-cachyos (sha512 verified), Faugus Launcher, LACT, sched-ext schedulers with the scx-manager GUI, one-command switching between scx_cake, scx_cosmos and scx_lavd, ananicy-cpp with the CachyOS ruleset |
 | Browsers | Zen Browser, Brave Origin, Helium, with hardware video decoding configured |
 | Messaging | Ferdium (WhatsApp, Telegram, Slack and more), Commet for Matrix, karere, Mailspring, Nicotine+, KDE Connect |
 | Media | Lollypop, Rhythmbox, Fragments, Memento, qBittorrent with the qui web UI, mpv with hardware decode, full ffmpeg and GStreamer codec stack |
+| File managers | Dolphin by default, Nautilus with the full GVFS stack (MTP, SMB, AFP, archive, FUSE, NFS, GOA, gphoto2), GNOME Disks |
+| Network | Sniffnet for network monitoring, Glance self-hosted dashboard, qui web UI for qBittorrent |
 | Development | Zed, VS Code, opencode, T3 Code, Helix, Nix (persistent `/var/nix`), uv, Bun, Deno, Node.js, GitHub CLI, yt-dlp, tmux, zellij, bat, eza, fd, ripgrep, fzf, duf, bottom |
 | AI | LM Studio, Vicinae launcher |
 | Virtualization | GNOME Boxes built from the newest upstream source, Pods, DistroShelf, Lobjur (Lobsters and Hacker News client), RustConn |
@@ -84,7 +86,7 @@ is applied.
 Tagged releases (`v*`) are created by the
 [release workflow](https://github.com/mheci/vibes/actions/workflows/release.yml).
 Each release verifies the image signature, records the verified digest and
-attaches an SPDX SBOM.
+attaches an SPDX SBOM attested to the image with cosign.
 
 ## How It Is Built
 
@@ -96,8 +98,7 @@ attaches an SPDX SBOM.
 | Sign | Image signed with a cosign private key stored in GitHub Secrets |
 | Scan | Trivy scans the repository on every push and the published image weekly |
 | Push | Published to `ghcr.io/mheci/vibes:latest` |
-| Boot | Daily QEMU boot test boots the image to the login prompt |
-| OpenQA | Daily headless boot test with os-autoinst |
+| Boot | Daily QEMU boot test plus an upgrade-path test that boots the previous image, applies `bootc upgrade` and reboots into the new deployment |
 | Reproducibility | Weekly no-cache rebuild that catches upstream breakage |
 | Upstream Health | Weekly check that every URL and release-asset pattern used by the scripts still resolves |
 | Release | Tagged releases verify the signature and attach an SBOM |
