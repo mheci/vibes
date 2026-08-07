@@ -33,8 +33,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Klassy window decorations and themes built from master.
 - Nautilus with the full GVFS backend set (MTP, SMB, AFP, archive, FUSE,
   NFS, GOA, gphoto2), GNOME Disks and Dolphin available as file managers.
-- The OpenQA workflow was removed: its coverage is fully provided by the
-  QEMU boot test in the boot workflow.
+- The SteamOS global theme suite from Valve (steamdeck-kde-presets)
+  and the Darkly desktop theme with its color scheme are installed
+  system-wide.
 - bottom is installed from its official GitHub release (not packaged in
   Fedora 44).
 - Images are verified against the embedded cosign public key before an
