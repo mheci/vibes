@@ -115,6 +115,9 @@ install_latest_rpm "Foundry376/Mailspring" 'mailspring-.*\.x86_64\.rpm$' "mailsp
 
 install_latest_rpm "ferdium/ferdium-app" 'Ferdium-linux-.*-x86_64\.rpm$' "ferdium"
 
+# Sniffnet: network monitoring and analysis tool (official release RPM)
+install_latest_rpm "GyulyVGC/sniffnet" 'Sniffnet_LinuxRPM_x86_64\.rpm$' "sniffnet"
+
 echo "Installing proton-cachyos..."
 compat_dir="/usr/share/steam/compatibilitytools.d/proton-cachyos"
 install -d -m 0755 /tmp/proton-cachyos "${compat_dir%/proton-cachyos}"
@@ -752,7 +755,7 @@ for cmd in eza bat fd rg fzf duf btm; do
 done
 
 for cmd in tmux zellij lollypop rhythmbox fragments trivy \
-    commet qbittorrent glance; do
+    commet qbittorrent glance sniffnet; do
   check_command "$cmd"
 done
 
