@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/lib.sh"
 
 # Derive the Fedora release so COPR chroots stay valid across rebases.
+# shellcheck disable=SC1091
 source /etc/os-release
 VERSION_ID="${VERSION_ID:-44}"
 
