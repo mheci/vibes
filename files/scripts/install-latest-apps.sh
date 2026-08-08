@@ -360,9 +360,9 @@ fi
 chmod 0755 /usr/local/bin/qui 2>/dev/null || true
 rm -f /tmp/qui.tar.gz
 
+NIX_INSTALLER_TAG="v3.21.9"
 echo "Installing Nix (Determinate Systems installer, ${NIX_INSTALLER_TAG})..."
 
-NIX_INSTALLER_TAG="v3.21.9"
 NIX_INSTALL_LOG="/tmp/nix-install.log"
 if [[ ! -x /var/nix/var/nix/profiles/default/bin/nix ]]; then
   # The nix-installer release page publishes no checksums, so the
