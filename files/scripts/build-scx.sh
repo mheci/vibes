@@ -36,19 +36,24 @@ export CARGO_TARGET_DIR=/var/cache/apt/target-scx
 cd /tmp/scx
 
 retry cargo fetch --locked
-retry cargo build \
-  --release \
-  --frozen \
-  --workspace \
-  --exclude scx_rlfifo \
-  --exclude scx_mitosis \
-  --exclude xtask \
-  --exclude scx_characterize \
-  --exclude vmlinux_docify \
-  --exclude scx_arena_selftests
-
-echo "--- Installing scx binaries ---"
-find target/release -maxdepth 1 -type f -executable ! -name '*.so' \
+if ! retry cargo build \
+    --release \
+    --frozen \
+    --workspace \
+    --exclude scx_rlfifo \
+    --exclude scx_mitosis \
+    --exclude xtask \
+    --exclude scx_characterize \
+    --exclude vmlinux_docify \
+    --exclude scx_arena_selftests \
+    > /tmp/scx-build.log 2>&1; then
+  echo "ERROR: scx cargo build failed; last 80 log lines:" >&2
+  tail -n 80 /tmp/scx-build.log >&2 || true
+  exit 1
+fi
+echo "scx cargo build finished (last 3 log lines):"
+tail -n 3 /tmp/scx-build.log
+find /var/cache/apt/target-scx/release -maxdepth 1 -type f -executable ! -name '*.so' \
   -exec install -Dm755 -t /usr/bin {} +
 
 echo "--- Building scx_loader/scxctl/scxtui (sched-ext/scx-loader, master) ---"
@@ -60,10 +65,15 @@ SCX_LOADER_COMMIT="$(git -C /tmp/scx-loader rev-parse --short HEAD)"
 echo "scx-loader master commit: ${SCX_LOADER_COMMIT}"
 
 cd /tmp/scx-loader
-CARGO_TARGET_DIR=/var/cache/apt/target-scx-loader retry cargo build --release
+if ! CARGO_TARGET_DIR=/var/cache/apt/target-scx-loader retry cargo build --release \
+    > /tmp/scx-loader-build.log 2>&1; then
+  echo "ERROR: scx-loader cargo build failed; last 80 log lines:" >&2
+  tail -n 80 /tmp/scx-loader-build.log >&2 || true
+  exit 1
+fi
 
 echo "--- Installing scx_loader toolchain ---"
-find target/release -maxdepth 1 -type f -executable ! -name '*.so' \
+find /var/cache/apt/target-scx-loader/release -maxdepth 1 -type f -executable ! -name '*.so' \
   -exec install -Dm755 -t /usr/bin {} +
 
 install -Dm644 services/scx_loader.service -t /usr/lib/systemd/system/
