@@ -126,7 +126,7 @@ proton_sum_url="${proton_url%.tar.xz}.sha512sum"
 echo "Downloading proton-cachyos from ${proton_url}"
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/proton-cachyos.tar.xz "$proton_url"
 retry curl -fL --retry 4 --retry-delay 10 -o /tmp/proton-cachyos.sha512sum "$proton_sum_url"
-expected="$(awk '{print $1}' /tmp/proton-cachyos.sha512sum)"
+expected="$(awk '/proton-cachyos/{print $1; exit}' /tmp/proton-cachyos.sha512sum)"
 actual="$(sha512sum /tmp/proton-cachyos.tar.xz | awk '{print $1}')"
 if [[ -z "$expected" || "$expected" != "$actual" ]]; then
   echo "ERROR: proton-cachyos sha512 verification failed" >&2
@@ -345,27 +345,39 @@ echo "Installing qui (qBittorrent web UI)..."
 QUI_VERSION="v1.23.0"
 QUI_URL="https://github.com/autobrr/qui/releases/download/${QUI_VERSION}/qui_${QUI_VERSION#v}_linux_x86_64.tar.gz"
 install -d -m 0755 /usr/local/bin
-retry curl -fL --retry 4 --retry-delay 10 -o /tmp/qui.tar.gz "${QUI_URL}"
-tar -C /usr/local/bin -xzf /tmp/qui.tar.gz 2>/dev/null || {
-  echo "WARN: qui download failed, trying latest release..." >&2
+# No -f here: a missing pinned asset must fall through to the latest
+# release fallback below instead of hard-failing the build.
+retry curl -L --retry 4 --retry-delay 10 -o /tmp/qui.tar.gz "${QUI_URL}"
+if ! tar -C /usr/local/bin -xzf /tmp/qui.tar.gz 2>/dev/null || [[ ! -x /usr/local/bin/qui ]]; then
+  echo "WARN: qui ${QUI_VERSION} download failed, trying latest release..." >&2
+  rm -f /tmp/qui.tar.gz
   QUI_URL="$(gh_latest_asset_url "autobrr/qui" 'linux_x86_64\.tar\.gz$')"
   if [[ -n "${QUI_URL}" ]]; then
     retry curl -fL --retry 4 --retry-delay 10 -o /tmp/qui.tar.gz "${QUI_URL}"
     tar -C /usr/local/bin -xzf /tmp/qui.tar.gz 2>/dev/null || true
   fi
-}
+fi
 chmod 0755 /usr/local/bin/qui 2>/dev/null || true
 rm -f /tmp/qui.tar.gz
 
-echo "Installing Nix (Determinate Systems installer)..."
-
 NIX_INSTALLER_TAG="v3.21.9"
+echo "Installing Nix (Determinate Systems installer, ${NIX_INSTALLER_TAG})..."
+
 NIX_INSTALL_LOG="/tmp/nix-install.log"
 if [[ ! -x /var/nix/var/nix/profiles/default/bin/nix ]]; then
-  if retry curl --proto '=https' --tlsv1.2 -sSf -L \
-      "https://install.determinate.systems/nix/tag/${NIX_INSTALLER_TAG}" | \
-      sh -s -- install linux --init none --no-confirm \
-        >"${NIX_INSTALL_LOG}" 2>&1; then
+  # The nix-installer release page publishes no checksums, so the
+  # pinned-tag release binary is fetched from the GitHub release API
+  # and its version is verified against the pinned tag before running.
+  NIX_BIN_URL="$(gh_asset_url "DeterminateSystems/nix-installer" 'nix-installer-x86_64-linux$' "${NIX_INSTALLER_TAG}")"
+  retry curl -fL --retry 4 --retry-delay 10 -o /tmp/nix-installer "${NIX_BIN_URL}"
+  chmod 0755 /tmp/nix-installer
+  if ! /tmp/nix-installer --version 2>/dev/null | grep -q "nix-installer ${NIX_INSTALLER_TAG#v}"; then
+    echo "ERROR: nix-installer version verification failed" >&2
+    /tmp/nix-installer --version 2>/dev/null || true
+    exit 1
+  fi
+  if /tmp/nix-installer install linux --init none --no-confirm \
+      >"${NIX_INSTALL_LOG}" 2>&1; then
     echo "Nix installed successfully"
   else
     echo "ERROR: Nix installation failed" >&2
@@ -373,7 +385,7 @@ if [[ ! -x /var/nix/var/nix/profiles/default/bin/nix ]]; then
     exit 1
   fi
 fi
-rm -f "${NIX_INSTALL_LOG}"
+rm -f "${NIX_INSTALL_LOG}" /tmp/nix-installer
 
 if [[ -d /nix/var && ! -d /var/nix/var ]]; then
   echo "Moving Nix store to /var/nix (persistent ostree state)..."
@@ -754,6 +766,16 @@ for cmd in eza bat fd rg fzf duf btm; do
   check_command "$cmd"
 done
 
+for cmd in sensors nvtop gparted fastfetch; do
+  check_command "$cmd"
+done
+if rpm -q dolphin-plugins >/dev/null 2>&1; then
+  echo "  OK: dolphin-plugins (rpm)"
+else
+  echo "  FAIL: dolphin-plugins not installed" >&2
+  errors=$((errors + 1))
+fi
+
 for cmd in tmux zellij lollypop rhythmbox fragments trivy \
     commet qbittorrent glance sniffnet; do
   check_command "$cmd"
@@ -763,17 +785,20 @@ for cmd in nautilus gnome-disks dolphin; do
   check_command "$cmd"
 done
 gvfs_backends=0
+gvfs_missing=()
 for gvfs_pkg in gvfs gvfs-mtp gvfs-smb gvfs-afp gvfs-archive gvfs-fuse \
     gvfs-nfs gvfs-goa gvfs-gphoto2; do
   if rpm -q "${gvfs_pkg}" >/dev/null 2>&1; then
     gvfs_backends=$((gvfs_backends + 1))
   else
-    echo "  FAIL: ${gvfs_pkg} not installed" >&2
-    errors=$((errors + 1))
+    gvfs_missing+=("${gvfs_pkg}")
   fi
 done
 if [[ ${gvfs_backends} -ge 5 ]]; then
   echo "  OK: ${gvfs_backends} GVFS backends installed"
+else
+  echo "  FAIL: only ${gvfs_backends} GVFS backends installed (${gvfs_missing[*]})" >&2
+  errors=$((errors + 1))
 fi
 
 check_file /etc/ananicy.d/ananicy.conf
@@ -836,7 +861,12 @@ fi
 check_file /usr/lib64/ladspa/librnnoise_ladspa.so
 check_file /etc/systemd/system/multi-user.target.wants/bpftune.service
 check_file /usr/share/icons/MoreWaita/index.theme
-check_file /usr/share/themes/Yaru/index.theme
+if ls /usr/share/themes/Yaru*/gtk-3.0/gtk.css >/dev/null 2>&1; then
+  echo "  OK: Yaru GTK3 theme"
+else
+  echo "  FAIL: /usr/share/themes/Yaru*/gtk-3.0/gtk.css not found" >&2
+  errors=$((errors + 1))
+fi
 check_file /usr/share/icons/Yaru/index.theme
 if rpm -q kdeconnectd >/dev/null 2>&1; then
   echo "  OK: kdeconnectd (rpm)"

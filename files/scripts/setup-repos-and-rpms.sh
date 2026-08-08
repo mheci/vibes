@@ -5,6 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
+# Derive the Fedora release so COPR chroots stay valid across rebases.
+# shellcheck disable=SC1091
+source /etc/os-release
+VERSION_ID="${VERSION_ID:-44}"
+
 echo "=== Setting up repositories and RPM packages ==="
 
 echo "--- Configuring third-party repositories ---"
@@ -52,7 +57,7 @@ add_copr bieszczaders/kernel-cachyos-addons
 
 add_copr bieszczaders/kernel-cachyos
 
-retry "${DNF[@]}" copr enable che/nerd-fonts fedora-44-x86_64
+retry "${DNF[@]}" copr enable che/nerd-fonts "fedora-${VERSION_ID}-x86_64"
 
 add_copr faugus/faugus-launcher
 
@@ -137,6 +142,11 @@ install_available \
   faugus-launcher \
   tmux lollypop rhythmbox fragments qbittorrent
 
+echo "--- Installing desktop utilities ---"
+
+install_available \
+  lm_sensors nvtop gparted dolphin-plugins fastfetch
+
 echo "--- Installing desktop integration ---"
 
 install_available \
@@ -201,7 +211,7 @@ rm -f "${SUDOERS_TMP}"
 echo "--- Installing Yaru theme packs ---"
 
 install_available \
-  yaru-gtk3-theme yaru-gtk4-theme gnome-shell-theme-yaru yaru-icon-theme
+  yaru-gtk3-theme yaru-gtk4-theme yaru-icon-theme
 
 echo "--- Installing multimedia codecs ---"
 
@@ -371,7 +381,6 @@ elif command -v scx_lavd >/dev/null 2>&1; then
 [Unit]
 Description=scx_lavd sched_ext scheduler in performance mode
 Documentation=https://github.com/sched-ext/scx
-After=multi-user.target
 ConditionPathExists=/sys/kernel/sched_ext
 
 [Service]
@@ -383,8 +392,8 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 UNIT
-  ln -sf /usr/lib/systemd/system/scx-lavd.service \
-    /etc/systemd/system/multi-user.target.wants/scx-lavd.service || true
+  # Not enabled here: build-scx.sh installs scx_loader.service, which is
+  # the real scheduler manager and must be the only enabled unit.
 fi
 
 for unit in tuned.service tuned-ppd.service; do
@@ -446,6 +455,8 @@ fi
 
 echo "--- Controlling automatic updates ---"
 
+install_available greenboot greenboot-default-health-checks greenboot-rpm-ostree
+
 install -d -m 0755 /etc/systemd/system
 for unit in ublue-update.timer bootc-fetch-apply-updates.timer \
     flatpak-update.timer updates-stage.timer; do
@@ -483,6 +494,31 @@ install -d -m 0755 /etc/systemd/system/timers.target.wants
 ln -sf /usr/lib/systemd/system/vibes-update-check.timer \
   /etc/systemd/system/timers.target.wants/vibes-update-check.timer
 echo "vibes-update-check.timer enabled (weekly notification only)"
+
+echo "--- Enabling greenboot health checks ---"
+
+for unit in greenboot-health-check.service greenboot-wait-boot-success.service \
+    greenboot-task-runner.service; do
+  if [[ -f "/usr/lib/systemd/system/${unit}" ]]; then
+    case "${unit}" in
+      greenboot-health-check.service)
+        install -d -m 0755 /etc/systemd/system/multi-user.target.wants
+        ln -sf "/usr/lib/systemd/system/${unit}" \
+          "/etc/systemd/system/multi-user.target.wants/${unit}"
+        echo "${unit} enabled"
+        ;;
+      greenboot-task-runner.service)
+        install -d -m 0755 /etc/systemd/system/sockets.target.wants
+        ln -sf "/usr/lib/systemd/system/${unit}" \
+          "/etc/systemd/system/sockets.target.wants/${unit}"
+        echo "${unit} enabled"
+        ;;
+      *)
+        echo "${unit} present (managed by greenboot)"
+        ;;
+    esac
+  fi
+done
 
 echo "--- Verifying firewall policy ---"
 

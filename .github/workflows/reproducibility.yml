@@ -20,7 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
-
+        with:
+          persist-credentials: false
       - name: Free disk space
         # The BlueBuild action's own free-disk-space step skips purging when
         # >= 80G is free, but build-chunked-oci rechunking needs ~2x the image
@@ -34,6 +35,10 @@ jobs:
           recipe: recipe.yml
           cosign_private_key: ${{ secrets.SIGNING_SECRET || '' }}
           push: false
+          # ghcr.io requires a valid token even for public images (the
+          # ublue-os base is pulled anonymously 401s), so authenticate
+          # with the job token like the daily build does.
+          registry_token: ${{ secrets.GITHUB_TOKEN }}
           pr_event_number: ''
           maximize_build_space: true
           use_cache: false
@@ -45,6 +50,38 @@ jobs:
           # always build the layer plan from scratch.
           rechunk_clear_plan: true
           verify_install: true
+
+      - name: Compare package set with published image
+        run: |
+          set -euo pipefail
+          IMG="ghcr.io/${{ github.repository_owner }}/vibes:latest"
+          RUNNER="docker"
+          LOCAL_REF="$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -i "vibes" | head -n1 || true)"
+          if [[ -z "${LOCAL_REF}" ]]; then
+            RUNNER="podman"
+            LOCAL_REF="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -i "vibes" | head -n1 || true)"
+          fi
+          if [[ -z "${LOCAL_REF}" ]]; then
+            echo "::warning::no locally rebuilt vibes image found, skipping package comparison"
+            exit 0
+          fi
+          echo "Comparing ${LOCAL_REF} (via ${RUNNER}) against ${IMG}"
+          ${RUNNER} pull "${IMG}" >/dev/null 2>&1 || { echo "::warning::could not pull :latest, skipping package comparison"; exit 0; }
+          ${RUNNER} run --rm "${LOCAL_REF}" rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}\n' 2>/dev/null | sort > /tmp/local-pkgs.txt
+          ${RUNNER} run --rm "${IMG}" rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}\n' 2>/dev/null | sort > /tmp/pub-pkgs.txt
+          {
+            echo "### Package drift vs :latest"
+            echo ""
+            echo "Local rebuild (no cache): $(wc -l < /tmp/local-pkgs.txt) packages"
+            echo "Published :latest: $(wc -l < /tmp/pub-pkgs.txt) packages"
+            echo ""
+            echo '```diff'
+            diff /tmp/pub-pkgs.txt /tmp/local-pkgs.txt || true
+            echo '```'
+            echo ""
+            echo "Package drift is expected between builds; the diff above shows"
+            echo "what changed since the published image."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report build result
         run: |

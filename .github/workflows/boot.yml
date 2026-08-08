@@ -15,7 +15,7 @@ permissions:
   packages: read
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-${{ github.event_name == 'workflow_dispatch' && inputs.image_ref || 'sched' }}
   cancel-in-progress: true
 
 jobs:
@@ -25,7 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
-
+        with:
+          persist-credentials: false
       - name: Maximize build space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
@@ -44,8 +45,10 @@ jobs:
 
       - name: Resolve image reference
         id: image
+        env:
+          IMAGE_REF: ${{ inputs.image_ref }}
         run: |
-          IMG="${{ inputs.image_ref }}"
+          IMG="${IMAGE_REF:-}"
           if [[ -z "${IMG}" ]]; then
             IMG="ghcr.io/${{ github.repository_owner }}/vibes:latest"
           fi
@@ -54,8 +57,7 @@ jobs:
 
       - name: Verify image signature
         run: |
-          cosign verify --key cosign.pub \
-            ${{ steps.image.outputs.image }} | tail -n 3
+          cosign verify --key cosign.pub "${{ steps.image.outputs.image }}"
 
       - name: Install podman and QEMU
         run: |
@@ -75,7 +77,7 @@ jobs:
             -v /dev:/dev \
             -v /var/lib/containers:/var/lib/containers \
             -v "$(pwd)/output:/output" \
-            ${{ steps.image.outputs.image }} \
+            "${{ steps.image.outputs.image }}" \
             bootc install to-disk --generic-image --via-loopback \
             --filesystem xfs \
             --karg console=ttyS0,115200 \
@@ -143,7 +145,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
-
+        with:
+          persist-credentials: false
       - name: Maximize build space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
@@ -236,8 +239,15 @@ jobs:
             tail -n 80 serial.log 2>/dev/null || true
             exit 1
           fi
+          MARK=$(wc -l < serial.log)
+          printf 'bootc status\n' >&3
+          sleep 15
+          FIRST_DIGEST=$(tail -n +$((MARK + 1)) serial.log | grep -oE 'sha256:[0-9a-f]{12}' | head -n1)
+          echo "Initial deployment digest: ${FIRST_DIGEST}"
           echo "Running bootc upgrade..."
-          printf 'bootc upgrade\n' >&3
+          # The deployment is installed from :previous; upgrade explicitly
+          # to the :latest tag of the same repository.
+          printf 'bootc upgrade --tag latest\n' >&3
           upgraded=0
           for _ in $(seq 1 240); do
             if grep -qE "Deployment updated|No update available" serial.log 2>/dev/null; then
@@ -274,12 +284,54 @@ jobs:
             exit 1
           fi
           sleep 10
+          MARK=$(wc -l < serial.log)
           printf 'bootc status\n' >&3
           sleep 15
-          if grep -q "mheci/vibes:latest" serial.log 2>/dev/null; then
-            echo "OK: upgraded deployment references vibes:latest"
+          LATEST_REF="ghcr.io/${{ github.repository_owner }}/vibes:latest"
+          if grep -q "${LATEST_REF}" serial.log 2>/dev/null; then
+            echo "OK: upgraded deployment references ${LATEST_REF}"
           else
-            echo "::error::bootc status does not show vibes:latest"
+            echo "::error::bootc status does not show ${LATEST_REF}"
+            tail -n 120 serial.log 2>/dev/null || true
+            exit 1
+          fi
+          UPGRADED_DIGEST=$(tail -n +$((MARK + 1)) serial.log | grep -oE 'sha256:[0-9a-f]{12}' | head -n1)
+          echo "Upgraded deployment digest: ${UPGRADED_DIGEST}"
+          if [[ -n "${UPGRADED_DIGEST}" && "${UPGRADED_DIGEST}" == "${FIRST_DIGEST}" ]]; then
+            echo "::error::upgrade produced the same deployment digest"
+            exit 1
+          fi
+          echo "Testing rollback..."
+          printf 'bootc rollback\n' >&3
+          sleep 15
+          printf 'systemctl reboot\n' >&3
+          third=0
+          for _ in $(seq 1 480); do
+            printf 'echo UP_MARK_3\n' >&3
+            if grep -q "UP_MARK_3" serial.log 2>/dev/null; then
+              third=1
+              break
+            fi
+            if ! kill -0 "$qemu_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+          if [[ $third -ne 1 ]]; then
+            echo "::error::Did not reach a shell after rollback reboot"
+            tail -n 120 serial.log 2>/dev/null || true
+            exit 1
+          fi
+          sleep 10
+          MARK=$(wc -l < serial.log)
+          printf 'bootc status\n' >&3
+          sleep 15
+          ROLLED_DIGEST=$(tail -n +$((MARK + 1)) serial.log | grep -oE 'sha256:[0-9a-f]{12}' | head -n1)
+          echo "Rolled back deployment digest: ${ROLLED_DIGEST}"
+          if [[ -n "${ROLLED_DIGEST}" && "${ROLLED_DIGEST}" == "${FIRST_DIGEST}" ]]; then
+            echo "OK: rollback returned to the previous deployment"
+          else
+            echo "::error::rollback did not return to the previous deployment (${ROLLED_DIGEST} vs ${FIRST_DIGEST})"
             tail -n 120 serial.log 2>/dev/null || true
             exit 1
           fi
@@ -291,6 +343,138 @@ jobs:
         uses: actions/upload-artifact@v7.0.1
         with:
           name: upgrade-serial-log
+          path: serial.log
+          if-no-files-found: warn
+          retention-days: 14
+
+  uefi-boot:
+    name: UEFI boot test (OVMF)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Maximize build space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+          large-packages: true
+          docker-images: false
+
+      - name: Install cosign
+        run: |
+          curl -fsSL -o /tmp/cosign \
+            https://github.com/sigstore/cosign/releases/download/v2.6.4/cosign-linux-amd64
+          chmod +x /tmp/cosign
+          sudo install -m 0755 /tmp/cosign /usr/local/bin/cosign
+
+      - name: Verify image signature
+        run: |
+          cosign verify --key cosign.pub \
+            ghcr.io/${{ github.repository_owner }}/vibes:latest
+
+      - name: Install podman, QEMU and OVMF
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq podman qemu-system-x86 ovmf
+
+      - name: Build bootable disk image
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          truncate -s 32G output/vibes-uefi.raw
+          BOOTC_DIRECT_IO=on sudo podman run --rm --privileged \
+            --pid=host --ipc=host --security-opt label=type:unconfined_t \
+            -v /dev:/dev \
+            -v /var/lib/containers:/var/lib/containers \
+            -v "$(pwd)/output:/output" \
+            ghcr.io/${{ github.repository_owner }}/vibes:latest \
+            bootc install to-disk --generic-image --via-loopback \
+            --filesystem xfs \
+            --karg console=ttyS0,115200 \
+            --karg systemd.unit=multi-user.target \
+            /output/vibes-uefi.raw
+
+      - name: Inspect EFI system partition
+        run: |
+          set -euo pipefail
+          # bootc generic images use a GPT with partition 1 as the ESP.
+          LOOP=$(sudo losetup --find --show -P output/vibes-uefi.raw)
+          mkdir -p /tmp/esp
+          sudo mount "${LOOP}p1" /tmp/esp
+          echo "--- EFI tree ---"
+          find /tmp/esp/EFI -maxdepth 3 -type f 2>/dev/null | sort || true
+          if [[ -f /tmp/esp/EFI/systemd/systemd-bootx64.efi ]]; then
+            echo "OK: systemd-boot present"
+          else
+            echo "::error::systemd-bootx64.efi missing from ESP"
+            sudo umount /tmp/esp
+            sudo losetup -d "${LOOP}"
+            exit 1
+          fi
+          UKI_COUNT=$(find /tmp/esp/EFI/Linux -name '*.efi' 2>/dev/null | wc -l)
+          echo "UKI kernels on ESP: ${UKI_COUNT}"
+          if [[ "${UKI_COUNT}" -gt 0 ]]; then
+            echo "OK: unified kernel images present"
+          fi
+          sudo umount /tmp/esp
+          sudo losetup -d "${LOOP}"
+
+      - name: Boot in QEMU under OVMF and verify
+        run: |
+          set -euo pipefail
+          ACCEL="tcg"
+          CPU="max"
+          if [[ -r /dev/kvm ]] && [[ -w /dev/kvm ]]; then
+            ACCEL="kvm"
+            CPU="host"
+          fi
+          echo "Using accel=${ACCEL}"
+          cp /usr/share/OVMF/OVMF_VARS_4M.fd /tmp/ovmf_vars.fd 2>/dev/null || \
+            cp /usr/share/OVMF/OVMF_VARS.fd /tmp/ovmf_vars.fd
+          CODE_FW="/usr/share/OVMF/OVMF_CODE_4M.fd"
+          [[ -f "${CODE_FW}" ]] || CODE_FW="/usr/share/OVMF/OVMF_CODE.fd"
+          rm -f serial.log
+          timeout 2400 qemu-system-x86_64 -machine accel=${ACCEL} \
+            -cpu ${CPU} -smp 4 -m 4096 -nographic -no-reboot \
+            -drive if=pflash,format=raw,readonly=on,file=${CODE_FW} \
+            -drive if=pflash,format=raw,file=/tmp/ovmf_vars.fd \
+            -drive file=output/vibes-uefi.raw,format=raw,if=virtio \
+            -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
+            > serial.log 2>&1 &
+          qemu_pid=$!
+          ok=0
+          for _ in $(seq 1 480); do
+            if grep -q "login:" serial.log; then
+              ok=1
+              echo "Boot reached login prompt under OVMF"
+              break
+            fi
+            if grep -q "Kernel panic" serial.log; then
+              echo "::error::Kernel panic detected"
+              break
+            fi
+            if ! kill -0 "$qemu_pid" 2>/dev/null && ! grep -q "login:" serial.log; then
+              echo "::error::QEMU exited before boot completed"
+              break
+            fi
+            sleep 5
+          done
+          kill "$qemu_pid" 2>/dev/null || true
+          if [[ $ok -ne 1 ]]; then
+            echo "::error::UEFI boot test failed; serial log tail:"
+            tail -n 120 serial.log
+            exit 1
+          fi
+          grep -E "Reached target|login:" serial.log | tail -n 20 || true
+
+      - name: Upload serial log
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: uefi-serial-log
           path: serial.log
           if-no-files-found: warn
           retention-days: 14

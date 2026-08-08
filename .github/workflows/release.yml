@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   actions: read
+  packages: read
 
 jobs:
   release:
@@ -17,6 +18,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Generate release notes
@@ -47,8 +49,8 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="ghcr.io/${{ github.repository_owner }}/vibes:latest"
-          cosign verify --key cosign.pub --output /tmp/payload.json "${IMAGE}"
-          DIGEST="$(jq -r '.critical.image.docker-manifest-digest' /tmp/payload.json)"
+          cosign verify -o json --key cosign.pub "${IMAGE}" > /tmp/payload.json
+          DIGEST="$(jq -r '.[0].critical.image.docker-manifest-digest' /tmp/payload.json)"
           echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
           echo "Verified ${IMAGE} (${DIGEST}) with cosign.pub"
 
@@ -69,10 +71,12 @@ jobs:
           name: vibes-sbom
 
       - name: Attest SBOM with cosign
+        env:
+          COSIGN_KEY: ${{ secrets.SIGNING_SECRET }}
         run: |
           set -euo pipefail
           KEY_FILE="$(mktemp)"
-          echo "${{ secrets.SIGNING_SECRET }}" > "${KEY_FILE}"
+          printf '%s' "${COSIGN_KEY}" > "${KEY_FILE}"
           IMAGE="ghcr.io/${{ github.repository_owner }}/vibes:latest"
           SBOM_FILE="$(find "${{ steps.download.outputs.download-path }}" -name '*.spdx.json' | head -n1)"
           if [[ -z "${SBOM_FILE}" ]]; then
@@ -83,6 +87,42 @@ jobs:
             --type spdx --predicate "${SBOM_FILE}" "${IMAGE}"
           rm -f "${KEY_FILE}"
           echo "Attested SBOM for ${IMAGE}"
+
+      - name: Attest SLSA provenance with cosign
+        env:
+          COSIGN_KEY: ${{ secrets.SIGNING_SECRET }}
+        run: |
+          set -euo pipefail
+          KEY_FILE="$(mktemp)"
+          printf '%s' "${COSIGN_KEY}" > "${KEY_FILE}"
+          IMAGE="ghcr.io/${{ github.repository_owner }}/vibes:latest"
+          PROV="$(mktemp)"
+          BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat > "${PROV}" <<JSON
+          {
+            "_type": "https://in-toto.io/Statement/v0.1",
+            "predicateType": "https://slsa.dev/provenance/v0.2",
+            "subject": [
+              { "name": "${IMAGE}", "digest": { "sha256": "${{ steps.verify.outputs.digest }}" } }
+            ],
+            "predicate": {
+              "builder": { "id": "https://github.com/${{ github.repository }}/.github/workflows/release.yml" },
+              "buildType": "https://github.com/actions/workflow@v1",
+              "invocation": {
+                "configSource": {
+                  "uri": "git+https://github.com/${{ github.repository }}@${{ github.sha }}",
+                  "digest": { "sha1": "${{ github.sha }}" },
+                  "entryPoint": "release.yml"
+                }
+              },
+              "metadata": { "buildStartedOn": "${BUILT_AT}" }
+            }
+          }
+          JSON
+          COSIGN_PASSWORD="" cosign attest --key "${KEY_FILE}" \
+            --type slsaprovenance --predicate "${PROV}" "${IMAGE}"
+          rm -f "${KEY_FILE}" "${PROV}"
+          echo "Attested SLSA provenance for ${IMAGE}"
 
       - name: Create Release
         uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0 # v3.0.2

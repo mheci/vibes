@@ -36,6 +36,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The SteamOS global theme suite from Valve (steamdeck-kde-presets)
   and the Darkly desktop theme with its color scheme are installed
   system-wide.
+- Build caching: the Rust toolchains (sched-ext, scx-loader,
+  scx-manager) and the Boxes and Klassy build trees now persist in the
+  build cache, making rebuilds incremental instead of from scratch.
+- Push-triggered image builds are skipped when the same commit already
+  has an open pull request, halving runner usage on branches.
+- Greenboot boot health checks with automatic rollback are enabled,
+  with a warning-level failed-unit check.
+- The boot test suite gained a UEFI (OVMF) boot test that verifies the
+  EFI system partition and unified kernel images, and the upgrade test
+  now also certifies `bootc rollback`.
+- Releases attach an SLSA provenance attestation alongside the SBOM.
+- The reproducibility run reports package drift against the published
+  image.
+- CI checkouts no longer persist credentials.
+- New vjust recipes: `luks-tpm-encrypt` (LUKS2 + TPM automatic unlock)
+  and the `dns-encrypted` / `dns-status` / `dns-default` encrypted DNS
+  set.
+- New desktop utilities: lm_sensors, nvtop, gparted, dolphin-plugins,
+  fastfetch.
 - bottom is installed from its official GitHub release (not packaged in
   Fedora 44).
 - Images are verified against the embedded cosign public key before an

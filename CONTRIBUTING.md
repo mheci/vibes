@@ -3,7 +3,7 @@
 ## Scope
 
 This repository defines a BlueBuild OCI image layered on top of
-Bluefin (NVIDIA Open). Contributions should improve the image's
+Aurora (NVIDIA Open). Contributions should improve the image's
 reliability, security, performance, or documentation.
 
 ## Pull Request Process

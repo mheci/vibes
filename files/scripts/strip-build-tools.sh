@@ -49,4 +49,14 @@ echo "--- Cleaning up ---"
 clean_build_artifacts
 rm -rf /root/.cargo /root/.rustup /root/.cache 2>/dev/null || true
 
+# Final dnf state cleanup: this is the last module that touches package
+# state, so repository metadata and transaction history can go now.
+"${DNF[@]}" clean all >/dev/null 2>&1 || true
+rm -rf /var/lib/dnf /var/cache/dnf /run/dnf || true
+
+# The files module copies sudoers.d entries with the repo mode (0644);
+# sudo requires a readable file, but 0440 is the canonical mode for
+# rules files and matches what the setup script installs.
+chmod 0440 /etc/sudoers.d/* 2>/dev/null || true
+
 echo "=== Build toolchains stripped successfully ==="

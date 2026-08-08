@@ -26,7 +26,7 @@ This policy covers:
 
 Out-of-scope:
 
-- The upstream Bluefin or BlueBuild projects (report to those projects)
+- The upstream Aurora or BlueBuild projects (report to those projects)
 - Third-party RPM packages and COPR repositories (report to those maintainers)
 - The base Fedora or Linux kernel (report to the respective distribution)
 

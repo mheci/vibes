@@ -25,7 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
-
+        with:
+          persist-credentials: false
       - name: Run Trivy on the repository
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
@@ -43,7 +44,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
-
+        with:
+          persist-credentials: false
       - name: Run Trivy on the published image
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:

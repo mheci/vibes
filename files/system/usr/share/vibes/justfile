@@ -1,6 +1,5 @@
 
 [group('System')]
-
 status:
     uname -r
     cat /usr/share/vibes/kernel-version
@@ -8,7 +7,7 @@ status:
     flatpak --version
 
 update:
-    bootc upgrade
+    sudo bootc upgrade
     flatpak update -y
 
 reboot:
@@ -52,10 +51,9 @@ service-restart service:
     sudo systemctl restart "{{service}}"
 
 [group('TPM')]
-
 tpm-status:
     sudo systemd-cryptenroll --status
-    tpm2_getcap handles-pcr 2>/dev/null || true
+    sudo tpm2_getcap handles-pcr 2>/dev/null || true
 
 tpm-enroll device:
     sudo systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=0+7 "{{device}}"
@@ -64,13 +62,12 @@ tpm-recovery device:
     sudo systemd-cryptenroll --recovery-key "{{device}}"
 
 tpm-pcrs:
-    tpm2_getcap pcrs 2>/dev/null || true
+    sudo tpm2_getcap pcrs 2>/dev/null || true
 
 [group('LUKS')]
-
 luks-status:
     sudo lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS
-    sudo cryptsetup luksDump /dev/nvme0n1p3 2>/dev/null || true
+    sudo cryptsetup luksDump $(sudo lsblk -n -o NAME -I 259 | head -n1 | sed 's|^|/dev/|') 2>/dev/null || true
 
 luks-header-backup device backup:
     sudo cryptsetup luksHeaderBackup "{{device}}" --header-backup-file "{{backup}}"
@@ -82,10 +79,32 @@ luks-add-key device:
 luks-remove-tpm device:
     sudo systemd-cryptenroll --wipe-slot=tpm2 "{{device}}"
 
-[group('Gaming')]
+# Encrypt a block device with LUKS2 and enroll the TPM for automatic
+# unlock at boot. A passphrase key slot is kept as fallback, the device
+# is added to /etc/crypttab under a stable name, and the next
+# deployment regenerates the initramfs, which will then unlock the
+# device automatically. All data on the device is wiped.
+luks-tpm-encrypt device:
+    sudo /usr/libexec/vibes-luks-tpm-encrypt.sh "{{device}}"
 
+# Enable encrypted DNS (DNS over TLS) through systemd-resolved. The
+# resolver defaults to Cloudflare (1.1.1.1, 1.0.0.1).
+[group('DNS')]
+dns-encrypted resolver='1.1.1.1':
+    sudo /usr/libexec/vibes-dns-encrypted.sh "{{resolver}}"
+
+dns-status:
+    resolvectl status
+    resolvectl query example.com | head -n 8
+
+dns-default:
+    sudo rm -f /etc/systemd/resolved.conf.d/encrypted-dns.conf
+    sudo systemctl restart systemd-resolved
+    echo "Encrypted DNS config removed; systemd-resolved defaults restored"
+
+[group('Gaming')]
 sched-status:
-    cat /sys/kernel/sched_ext/root/ops 2>/dev/null || echo "no scheduler running"
+    ls /sys/kernel/sched_ext/root/ops 2>/dev/null || echo "no scheduler running"
     systemctl status scx_loader --no-pager
 
 sched-list:
@@ -98,46 +117,46 @@ sched-set sched:
 
 sched-cake:
     sudo tee /etc/scx_loader/config.toml >/dev/null <<'TOML'
-default_sched = "scx_cake"
-default_mode = "Gaming"
-
-[scheds.scx_cake]
-gaming_mode = ["--performance"]
-lowlatency_mode = ["--performance"]
-auto_mode = ["--autopilot"]
-powersave_mode = ["--powersave"]
-server_mode = ["--autopilot"]
-TOML
+    default_sched = "scx_cake"
+    default_mode = "Gaming"
+    
+    [scheds.scx_cake]
+    gaming_mode = ["--performance"]
+    lowlatency_mode = ["--performance"]
+    auto_mode = ["--autopilot"]
+    powersave_mode = ["--powersave"]
+    server_mode = ["--autopilot"]
+    TOML
     sudo systemctl restart scx_loader
     cat /sys/kernel/sched_ext/root/ops 2>/dev/null || true
 
 sched-cosmos:
     sudo tee /etc/scx_loader/config.toml >/dev/null <<'TOML'
-default_sched = "scx_cosmos"
-default_mode = "Gaming"
-
-[scheds.scx_cosmos]
-gaming_mode = ["--performance"]
-lowlatency_mode = ["--performance"]
-auto_mode = ["--autopilot"]
-powersave_mode = ["--powersave"]
-server_mode = ["--autopilot"]
-TOML
+    default_sched = "scx_cosmos"
+    default_mode = "Gaming"
+    
+    [scheds.scx_cosmos]
+    gaming_mode = ["--performance"]
+    lowlatency_mode = ["--performance"]
+    auto_mode = ["--autopilot"]
+    powersave_mode = ["--powersave"]
+    server_mode = ["--autopilot"]
+    TOML
     sudo systemctl restart scx_loader
     cat /sys/kernel/sched_ext/root/ops 2>/dev/null || true
 
 sched-lavd:
     sudo tee /etc/scx_loader/config.toml >/dev/null <<'TOML'
-default_sched = "scx_lavd"
-default_mode = "Gaming"
-
-[scheds.scx_lavd]
-gaming_mode = ["--performance"]
-lowlatency_mode = ["--performance"]
-auto_mode = ["--autopilot"]
-powersave_mode = ["--powersave"]
-server_mode = ["--autopilot"]
-TOML
+    default_sched = "scx_lavd"
+    default_mode = "Gaming"
+    
+    [scheds.scx_lavd]
+    gaming_mode = ["--performance"]
+    lowlatency_mode = ["--performance"]
+    auto_mode = ["--autopilot"]
+    powersave_mode = ["--powersave"]
+    server_mode = ["--autopilot"]
+    TOML
     sudo systemctl restart scx_loader
     cat /sys/kernel/sched_ext/root/ops 2>/dev/null || true
 
@@ -174,7 +193,6 @@ ntsync-status:
     lsmod | grep ntsync || echo "ntsync module not loaded"
 
 [group('NVIDIA')]
-
 nvidia-status:
     nvidia-smi
 
@@ -189,7 +207,6 @@ gpu-watch:
     nvidia-smi dmon -d 1
 
 [group('Flatpak')]
-
 flatpak-update:
     flatpak update -y
 
@@ -200,7 +217,6 @@ flatpak-apps:
     flatpak list --app
 
 [group('Nix')]
-
 nix-version:
     /nix/var/nix/profiles/default/bin/nix --version
 
@@ -212,7 +228,6 @@ nix-info:
     sudo /nix/var/nix/profiles/default/bin/nix-store -q --roots /nix/var/nix/profiles
 
 [group('Audio')]
-
 audio-info:
     pactl info
 
@@ -220,9 +235,8 @@ audio-sinks:
     pactl list short sinks
 
 [group('Hardware')]
-
 battery:
-    upower -i /org/freedesktop/UPower/devices/battery_BAT0
+    upower -i $(upower --enumerate | grep -i battery | head -n1)
 
 temps:
     sensors 2>/dev/null || echo "sensors not installed (dnf install lm_sensors)"

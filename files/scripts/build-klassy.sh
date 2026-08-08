@@ -31,10 +31,10 @@ retry git clone --depth 1 https://github.com/ekaaty/klassy.git /tmp/klassy
 KLASSY_COMMIT="$(git -C /tmp/klassy rev-parse --short HEAD)"
 echo "klassy master commit: ${KLASSY_COMMIT}"
 
-cmake -B /tmp/klassy/build -S /tmp/klassy \
+cmake -B /var/cache/apt/klassy-build -S /tmp/klassy \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_TESTING=OFF
-cmake --build /tmp/klassy/build -j"$(nproc)"
-cmake --install /tmp/klassy/build
+cmake --build /var/cache/apt/klassy-build -j"$(nproc)"
+cmake --install /var/cache/apt/klassy-build
 
 echo "=== Running Klassy smoke checks ==="
 errors=0
