@@ -100,6 +100,11 @@ attaches an SPDX SBOM attested to the image with cosign.
 | Sign | Image signed with a cosign private key stored in GitHub Secrets |
 | Scan | Trivy scans the repository on every push and the published image weekly |
 | Push | Published to `ghcr.io/mheci/vibes:latest` |
+
+The complete low-level reference — installation, build architecture,
+every configuration file, the vjust suite, the CI/CD pipeline, the
+boot-test infrastructure and troubleshooting — lives in
+[docs/TECHNICAL.md](docs/TECHNICAL.md).
 | Boot | Daily QEMU boot test (BIOS and UEFI) plus an upgrade-path test that boots the previous image, applies `bootc upgrade`, reboots and certifies `bootc rollback` |
 | Reproducibility | Weekly no-cache rebuild that catches upstream breakage |
 | Upstream Health | Weekly check that every URL and release-asset pattern used by the scripts still resolves |
