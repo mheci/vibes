@@ -351,8 +351,6 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-        with:
-          persist-credentials: false
 
       - name: Maximize build space
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
