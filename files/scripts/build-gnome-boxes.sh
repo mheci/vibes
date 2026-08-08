@@ -40,12 +40,13 @@ build_boxes() {
   echo "Building GNOME Boxes at tag ${BOXES_TAG}"
 
   echo "--- Configuring and building ---"
-  meson setup "${BUILD_DIR}/build" "${BUILD_DIR}" \
+  BOXES_BUILD_DIR="/var/cache/apt/boxes-build"
+  meson setup "${BOXES_BUILD_DIR}" "${BUILD_DIR}" \
     --prefix /usr --libdir lib64 --buildtype release -Dinstalled_tests=false
-  ninja -C "${BUILD_DIR}/build" || ninja -C "${BUILD_DIR}/build" -j 1
+  ninja -C "${BOXES_BUILD_DIR}" || ninja -C "${BOXES_BUILD_DIR}" -j 1
 
   echo "--- Installing ---"
-  DESTDIR="${BUILD_DIR}/stage" ninja -C "${BUILD_DIR}/build" install
+  DESTDIR="${BUILD_DIR}/stage" ninja -C "${BOXES_BUILD_DIR}" install
   cp -ra "${BUILD_DIR}/stage/usr/lib64/." /usr/lib64/
   cp -ra "${BUILD_DIR}/stage/usr/lib/." /usr/lib/ 2>/dev/null || true
   cp -ra "${BUILD_DIR}/stage/usr/libexec/." /usr/libexec/ 2>/dev/null || true

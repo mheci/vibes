@@ -25,13 +25,14 @@ done
 echo "--- Cloning sched-ext/scx (master) ---"
 
 SCX_COMMIT=""
-rm -rf /tmp/scx /tmp/scx-cargo
+rm -rf /tmp/scx
 retry git clone --depth 1 https://github.com/sched-ext/scx.git /tmp/scx
 SCX_COMMIT="$(git -C /tmp/scx rev-parse --short HEAD)"
 echo "scx master commit: ${SCX_COMMIT}"
 
 echo "--- Building scx schedulers (cargo, release) ---"
-export CARGO_HOME=/tmp/scx-cargo
+export CARGO_HOME=/var/cache/apt/cargo
+export CARGO_TARGET_DIR=/var/cache/apt/target-scx
 cd /tmp/scx
 
 retry cargo fetch --locked
@@ -59,7 +60,7 @@ SCX_LOADER_COMMIT="$(git -C /tmp/scx-loader rev-parse --short HEAD)"
 echo "scx-loader master commit: ${SCX_LOADER_COMMIT}"
 
 cd /tmp/scx-loader
-retry cargo build --release
+CARGO_TARGET_DIR=/var/cache/apt/target-scx-loader retry cargo build --release
 
 echo "--- Installing scx_loader toolchain ---"
 find target/release -maxdepth 1 -type f -executable ! -name '*.so' \
@@ -147,7 +148,7 @@ if [[ $errors -gt 0 ]]; then
 fi
 
 echo "--- Cleaning up ---"
-rm -rf /tmp/scx /tmp/scx-loader /tmp/scx-cargo
+rm -rf /tmp/scx /tmp/scx-loader
 clean_build_artifacts
 
 echo "=== sched-ext/scx (${SCX_COMMIT}) + scx-loader (${SCX_LOADER_COMMIT}) built and installed successfully ==="

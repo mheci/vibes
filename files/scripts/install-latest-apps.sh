@@ -754,6 +754,16 @@ for cmd in eza bat fd rg fzf duf btm; do
   check_command "$cmd"
 done
 
+for cmd in sensors nvtop gparted fastfetch; do
+  check_command "$cmd"
+done
+if rpm -q dolphin-plugins >/dev/null 2>&1; then
+  echo "  OK: dolphin-plugins (rpm)"
+else
+  echo "  FAIL: dolphin-plugins not installed" >&2
+  errors=$((errors + 1))
+fi
+
 for cmd in tmux zellij lollypop rhythmbox fragments trivy \
     commet qbittorrent glance sniffnet; do
   check_command "$cmd"

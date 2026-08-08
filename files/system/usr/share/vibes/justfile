@@ -82,6 +82,75 @@ luks-add-key device:
 luks-remove-tpm device:
     sudo systemd-cryptenroll --wipe-slot=tpm2 "{{device}}"
 
+# Encrypt a block device with LUKS2 and enroll the TPM for automatic
+# unlock at boot. A passphrase key slot is kept as fallback, the device
+# is added to /etc/crypttab under a stable name, and the initramfs is
+# regenerated so it can unlock at boot. All data on the device is wiped.
+luks-tpm-encrypt device:
+    sudo bash -s -- "{{device}}" <<'LUKS'
+set -euo pipefail
+DEV="$1"
+if [[ ! -b "${DEV}" ]]; then
+  echo "ERROR: ${DEV} is not a block device" >&2
+  exit 1
+fi
+if cryptsetup isLuks "${DEV}" 2>/dev/null; then
+  echo "ERROR: ${DEV} is already a LUKS device" >&2
+  exit 1
+fi
+read -r -p "Wipe ${DEV} and encrypt it with LUKS2? All data will be lost (yes/no): " CONFIRM
+if [[ "${CONFIRM}" != "yes" ]]; then
+  echo "Aborted"
+  exit 1
+fi
+if ! command -v tpm2_getcap >/dev/null 2>&1 || ! tpm2_getcap handles-pcr >/dev/null 2>&1; then
+  echo "ERROR: no TPM 2.0 found; cannot set up automatic unlock" >&2
+  exit 1
+fi
+echo "Formatting ${DEV} with LUKS2..."
+cryptsetup luksFormat --type luks2 --cipher aes-xts-plain64 --key-size 512 "${DEV}"
+echo "Enrolling the TPM for automatic unlock (PCR 0+7)..."
+systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=0+7 "${DEV}"
+UUID="$(cryptsetup luksUUID "${DEV}")"
+NAME="vault-${UUID:0:8}"
+if ! grep -q "^${NAME} " /etc/crypttab 2>/dev/null; then
+  echo "${NAME} UUID=${UUID} none tpm2-device=auto" >> /etc/crypttab
+fi
+echo "Added /etc/crypttab entry: ${NAME}"
+echo "Regenerating the initramfs..."
+dracut --force --regenerate-all >/dev/null 2>&1 || dracut --force >/dev/null 2>&1
+echo "Done. ${DEV} unlocks automatically at boot via the TPM."
+echo "Fallback passphrase from the format step still works."
+echo "Verify with: vjust luks-status"
+LUKS
+
+[group('DNS')]
+
+# Enable encrypted DNS (DNS over TLS) through systemd-resolved. The
+# resolver defaults to Cloudflare (1.1.1.1, 1.0.0.1).
+dns-encrypted resolver=:
+    sudo bash -s -- "{{resolver}}" <<'DNS'
+set -euo pipefail
+RESOLVER="${1:-1.1.1.1}"
+install -d -m 0755 /etc/systemd/resolved.conf.d
+cat >/etc/systemd/resolved.conf.d/encrypted-dns.conf <<CONF
+[Resolve]
+DNS=${RESOLVER} 1.1.1.1 1.0.0.1
+DNSOverTLS=yes
+CONF
+systemctl restart systemd-resolved
+echo "Encrypted DNS enabled: ${RESOLVER} (DoT)"
+DNS
+
+dns-status:
+    resolvectl status
+    resolvectl query example.com | head -n 8
+
+dns-default:
+    sudo rm -f /etc/systemd/resolved.conf.d/encrypted-dns.conf
+    sudo systemctl restart systemd-resolved
+    echo "Encrypted DNS config removed; systemd-resolved defaults restored"
+
 [group('Gaming')]
 
 sched-status:

@@ -137,6 +137,11 @@ install_available \
   faugus-launcher \
   tmux lollypop rhythmbox fragments qbittorrent
 
+echo "--- Installing desktop utilities ---"
+
+install_available \
+  lm_sensors nvtop gparted dolphin-plugins fastfetch
+
 echo "--- Installing desktop integration ---"
 
 install_available \
@@ -446,6 +451,8 @@ fi
 
 echo "--- Controlling automatic updates ---"
 
+install_available greenboot greenboot-default-health-checks greenboot-rpm-ostree
+
 install -d -m 0755 /etc/systemd/system
 for unit in ublue-update.timer bootc-fetch-apply-updates.timer \
     flatpak-update.timer updates-stage.timer; do
@@ -483,6 +490,31 @@ install -d -m 0755 /etc/systemd/system/timers.target.wants
 ln -sf /usr/lib/systemd/system/vibes-update-check.timer \
   /etc/systemd/system/timers.target.wants/vibes-update-check.timer
 echo "vibes-update-check.timer enabled (weekly notification only)"
+
+echo "--- Enabling greenboot health checks ---"
+
+for unit in greenboot-health-check.service greenboot-wait-boot-success.service \
+    greenboot-task-runner.service; do
+  if [[ -f "/usr/lib/systemd/system/${unit}" ]]; then
+    case "${unit}" in
+      greenboot-health-check.service)
+        install -d -m 0755 /etc/systemd/system/multi-user.target.wants
+        ln -sf "/usr/lib/systemd/system/${unit}" \
+          "/etc/systemd/system/multi-user.target.wants/${unit}"
+        echo "${unit} enabled"
+        ;;
+      greenboot-task-runner.service)
+        install -d -m 0755 /etc/systemd/system/sockets.target.wants
+        ln -sf "/usr/lib/systemd/system/${unit}" \
+          "/etc/systemd/system/sockets.target.wants/${unit}"
+        echo "${unit} enabled"
+        ;;
+      *)
+        echo "${unit} present (managed by greenboot)"
+        ;;
+    esac
+  fi
+done
 
 echo "--- Verifying firewall policy ---"
 

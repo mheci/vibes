@@ -20,7 +20,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
-
+        with:
+          persist-credentials: false
       - name: Free disk space
         # The BlueBuild action's own free-disk-space step skips purging when
         # >= 80G is free, but build-chunked-oci rechunking needs ~2x the image
@@ -45,6 +46,32 @@ jobs:
           # always build the layer plan from scratch.
           rechunk_clear_plan: true
           verify_install: true
+
+      - name: Compare package set with published image
+        run: |
+          set -euo pipefail
+          IMG="ghcr.io/${{ github.repository_owner }}/vibes:latest"
+          LOCAL_ID="$(podman images --format '{{.ID}} {{.Repository}}' | grep -i 'vibes' | awk '{print $1}' | head -n1 || true)"
+          if [[ -z "${LOCAL_ID}" ]]; then
+            echo "::warning::no local rebuilt image found, skipping package comparison"
+            exit 0
+          fi
+          podman pull "${IMG}" >/dev/null 2>&1 || { echo "::warning::could not pull :latest, skipping package comparison"; exit 0; }
+          podman run --rm "${LOCAL_ID}" rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}\n' 2>/dev/null | sort > /tmp/local-pkgs.txt
+          podman run --rm "${IMG}" rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}\n' 2>/dev/null | sort > /tmp/pub-pkgs.txt
+          {
+            echo "### Package drift vs :latest"
+            echo ""
+            echo "Local rebuild (no cache): $(wc -l < /tmp/local-pkgs.txt) packages"
+            echo "Published :latest: $(wc -l < /tmp/pub-pkgs.txt) packages"
+            echo ""
+            echo '```diff'
+            diff /tmp/pub-pkgs.txt /tmp/local-pkgs.txt || true
+            echo '```'
+            echo ""
+            echo "Package drift is expected between builds; the diff above shows"
+            echo "what changed since the published image."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Report build result
         run: |

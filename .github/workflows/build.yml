@@ -44,6 +44,20 @@ jobs:
         recipe:
           - recipe.yml
     steps:
+      - name: Check for open pull request
+        id: pr-check
+        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          OPEN=$(gh api "repos/${{ github.repository }}/pulls?state=open&head=${{ github.repository_owner }}:${BRANCH}" --jq 'length')
+          if [[ "${OPEN}" -gt 0 ]]; then
+            echo "Open PR found, push build redundant"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Free disk space
         # The BlueBuild action's own free-disk-space step skips purging when
         # >= 80G is free, but build-chunked-oci rechunking needs ~2x the image
@@ -65,7 +79,7 @@ jobs:
             echo "No existing :latest image, skipping"
           fi
       - name: Build Custom Image
-        if: env.SIGNING_KEY != ''
+        if: env.SIGNING_KEY != '' && steps.pr-check.outputs.skip != 'true'
         uses: blue-build/github-action@836161eb076426a451e6a0054f722b1153b8b3ad # v1.12.0
         with:
           recipe: ${{ matrix.recipe }}

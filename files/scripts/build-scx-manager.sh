@@ -17,7 +17,9 @@ echo "scx-manager master commit: ${SCX_MANAGER_COMMIT}"
 
 cmake -B /tmp/scx-manager/build -S /tmp/scx-manager \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
-cmake --build /tmp/scx-manager/build -j"$(nproc)"
+CARGO_HOME=/var/cache/apt/cargo \
+  CARGO_TARGET_DIR=/var/cache/apt/target-scx-manager \
+  cmake --build /tmp/scx-manager/build -j"$(nproc)"
 cmake --install /tmp/scx-manager/build
 
 echo "=== Running scx-manager smoke checks ==="

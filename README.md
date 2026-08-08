@@ -34,7 +34,7 @@ update quickly.
 | AI | LM Studio, Vicinae launcher |
 | Virtualization | GNOME Boxes built from the newest upstream source, Pods, DistroShelf, Lobjur (Lobsters and Hacker News client), RustConn |
 | Security | cosign signing with signature-verified upgrades, Trivy scanning, sudo-rs, SELinux gaming tuning, UKI support, GitHub Actions pinned to exact SHAs |
-| System | PipeWire tuned for voice and gaming, uresourced, nohang, prelockd, tuned with latency-performance, BBR networking, KDE defaults (Breeze Dark, Inter), automatic updates off with a weekly update notification, `vjust` command recipes |
+| System | PipeWire tuned for voice and gaming, uresourced, nohang, prelockd, tuned with latency-performance, BBR networking, KDE defaults (Breeze Dark, Inter), automatic updates off with a weekly update notification, greenboot health checks with automatic rollback, `vjust` command recipes (including LUKS + TPM encryption and encrypted DNS) |
 
 The full list of packages, Flatpaks and extensions lives in
 [`recipes/recipe.yml`](recipes/recipe.yml) and the build scripts under
@@ -98,7 +98,7 @@ attaches an SPDX SBOM attested to the image with cosign.
 | Sign | Image signed with a cosign private key stored in GitHub Secrets |
 | Scan | Trivy scans the repository on every push and the published image weekly |
 | Push | Published to `ghcr.io/mheci/vibes:latest` |
-| Boot | Daily QEMU boot test plus an upgrade-path test that boots the previous image, applies `bootc upgrade` and reboots into the new deployment |
+| Boot | Daily QEMU boot test (BIOS and UEFI) plus an upgrade-path test that boots the previous image, applies `bootc upgrade`, reboots and certifies `bootc rollback` |
 | Reproducibility | Weekly no-cache rebuild that catches upstream breakage |
 | Upstream Health | Weekly check that every URL and release-asset pattern used by the scripts still resolves |
 | Release | Tagged releases verify the signature and attach an SBOM |
