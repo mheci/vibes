@@ -861,7 +861,12 @@ fi
 check_file /usr/lib64/ladspa/librnnoise_ladspa.so
 check_file /etc/systemd/system/multi-user.target.wants/bpftune.service
 check_file /usr/share/icons/MoreWaita/index.theme
-check_file /usr/share/themes/Yaru/index.theme
+if ls /usr/share/themes/Yaru*/index.theme >/dev/null 2>&1; then
+  echo "  OK: Yaru GTK theme index"
+else
+  echo "  FAIL: /usr/share/themes/Yaru*/index.theme not found" >&2
+  errors=$((errors + 1))
+fi
 check_file /usr/share/icons/Yaru/index.theme
 if rpm -q kdeconnectd >/dev/null 2>&1; then
   echo "  OK: kdeconnectd (rpm)"
