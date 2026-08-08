@@ -29,24 +29,16 @@ jobs:
         # even that. Purge unconditionally before the rebuild starts.
         uses: hastd/free-disk-space@68572aeaadb7f76bd408246328e95926323402b5 # v0.1.2
 
-      - name: Reset registry auth for anonymous pulls
-        run: |
-          # GitHub-hosted runners are pre-authenticated to ghcr.io with the
-          # job token, which has no access to the ublue-os namespace; ghcr
-          # rejects that authenticated request instead of falling back to an
-          # anonymous pull. The base image and the rebuilt image are public,
-          # so drop the stored credential before the rebuild.
-          docker logout ghcr.io 2>/dev/null || true
-          rm -f "${HOME}/.docker/config.json" 2>/dev/null || true
-
       - name: Rebuild recipe with cache disabled
         uses: blue-build/github-action@836161eb076426a451e6a0054f722b1153b8b3ad # v1.12.0
-        env:
-          GH_TOKEN: ""
         with:
           recipe: recipe.yml
           cosign_private_key: ${{ secrets.SIGNING_SECRET || '' }}
           push: false
+          # ghcr.io requires a valid token even for public images (the
+          # ublue-os base is pulled anonymously 401s), so authenticate
+          # with the job token like the daily build does.
+          registry_token: ${{ secrets.GITHUB_TOKEN }}
           pr_event_number: ''
           maximize_build_space: true
           use_cache: false
