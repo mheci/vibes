@@ -861,10 +861,10 @@ fi
 check_file /usr/lib64/ladspa/librnnoise_ladspa.so
 check_file /etc/systemd/system/multi-user.target.wants/bpftune.service
 check_file /usr/share/icons/MoreWaita/index.theme
-if ls /usr/share/themes/Yaru*/index.theme >/dev/null 2>&1; then
-  echo "  OK: Yaru GTK theme index"
+if ls /usr/share/themes/Yaru*/gtk-3.0/gtk.css >/dev/null 2>&1; then
+  echo "  OK: Yaru GTK3 theme"
 else
-  echo "  FAIL: /usr/share/themes/Yaru*/index.theme not found" >&2
+  echo "  FAIL: /usr/share/themes/Yaru*/gtk-3.0/gtk.css not found" >&2
   errors=$((errors + 1))
 fi
 check_file /usr/share/icons/Yaru/index.theme
