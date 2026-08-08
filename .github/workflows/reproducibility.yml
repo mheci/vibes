@@ -31,6 +31,13 @@ jobs:
 
       - name: Rebuild recipe with cache disabled
         uses: blue-build/github-action@836161eb076426a451e6a0054f722b1153b8b3ad # v1.12.0
+        env:
+          # The CLI authenticates to registries with GH_TOKEN when set; the
+          # job token has no access to the ublue-os namespace, and ghcr
+          # rejects the authenticated request instead of falling back to
+          # anonymous pulls. The base image and the rebuilt image are both
+          # public, so force anonymous registry auth here.
+          GH_TOKEN: ""
         with:
           recipe: recipe.yml
           cosign_private_key: ${{ secrets.SIGNING_SECRET || '' }}
