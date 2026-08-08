@@ -115,8 +115,8 @@ echo "== Pinned GitLab tags =="
 check_url "https://gitlab.gnome.org/GNOME/gnome-boxes/-/tags/50.0"
 check_url "https://gitlab.com/evlaV/steamdeck-kde-presets/-/archive/0.30/steamdeck-kde-presets-0.30.tar.gz"
 github_commit_exists "Bali10050/Darkly" "11c27e2d98025f4d4c1598f07a185280b36f35f7"
-github_commit_exists "CachyOS/scx-manager" "af37c3e7bbffa6b259c3d0aec88da33c6e0062b0"
-github_commit_exists "ekaaty/klassy" "800e71ce2bbd0824a0a687484222611acd5dc4ad"
+# scx-manager and Klassy are intentionally built from master (latest
+# commits) at image build time; they have no pinned commit to check.
 
 echo
 echo "== Kernel and scheduler sources =="
@@ -138,7 +138,7 @@ check_url "https://github.com/NVIDIA/open-gpu-kernel-modules/releases/latest"
 check_url "https://github.com/sched-ext/scx/tags.atom"
 
 echo
-echo "== Element Desktop download channel =="
+echo "== Commet download channel =="
 latest_asset_matches "commetchat/commet" "commet-linux-portable-x64\\.tar\\.gz$" "commet"
 check_url "https://gitlab.gnome.org/GNOME/gnome-boxes/-/raw/main/meson.build"
 

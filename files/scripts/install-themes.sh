@@ -33,7 +33,10 @@ git -C /tmp/morewaita init -q
 git -C /tmp/morewaita remote add origin https://github.com/somepaulo/MoreWaita.git
 retry git -C /tmp/morewaita fetch -q --depth 1 origin "${MOREWAITA_PIN}"
 git -C /tmp/morewaita checkout -q FETCH_HEAD
-bash /tmp/morewaita/install.sh
+bash /tmp/morewaita/install.sh || {
+  echo "ERROR: MoreWaita install.sh failed" >&2
+  exit 1
+}
 rm -rf /tmp/morewaita
 
 echo "=== Desktop themes installed successfully ==="

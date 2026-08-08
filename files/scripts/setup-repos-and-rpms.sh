@@ -5,6 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 source "${SCRIPT_DIR}/lib.sh"
 
+# Derive the Fedora release so COPR chroots stay valid across rebases.
+source /etc/os-release
+VERSION_ID="${VERSION_ID:-44}"
+
 echo "=== Setting up repositories and RPM packages ==="
 
 echo "--- Configuring third-party repositories ---"
@@ -52,7 +56,7 @@ add_copr bieszczaders/kernel-cachyos-addons
 
 add_copr bieszczaders/kernel-cachyos
 
-retry "${DNF[@]}" copr enable che/nerd-fonts fedora-44-x86_64
+retry "${DNF[@]}" copr enable che/nerd-fonts "fedora-${VERSION_ID}-x86_64"
 
 add_copr faugus/faugus-launcher
 
@@ -206,7 +210,7 @@ rm -f "${SUDOERS_TMP}"
 echo "--- Installing Yaru theme packs ---"
 
 install_available \
-  yaru-gtk3-theme yaru-gtk4-theme gnome-shell-theme-yaru yaru-icon-theme
+  yaru-gtk3-theme yaru-gtk4-theme yaru-icon-theme
 
 echo "--- Installing multimedia codecs ---"
 
@@ -376,7 +380,6 @@ elif command -v scx_lavd >/dev/null 2>&1; then
 [Unit]
 Description=scx_lavd sched_ext scheduler in performance mode
 Documentation=https://github.com/sched-ext/scx
-After=multi-user.target
 ConditionPathExists=/sys/kernel/sched_ext
 
 [Service]
@@ -388,8 +391,8 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 UNIT
-  ln -sf /usr/lib/systemd/system/scx-lavd.service \
-    /etc/systemd/system/multi-user.target.wants/scx-lavd.service || true
+  # Not enabled here: build-scx.sh installs scx_loader.service, which is
+  # the real scheduler manager and must be the only enabled unit.
 fi
 
 for unit in tuned.service tuned-ppd.service; do

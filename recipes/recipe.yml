@@ -113,8 +113,7 @@ modules:
       - nowatchdog
       # Disable split lock detection and mitigation (stutter/audio crackle on
       # CPUs that busy-loop on split locks, e.g. older Intel)
-      - split_lock_detect=off
-      - split_lock_mitigate=off
+- split_lock_detect=off
 
   - type: containerfile
     snippets:

@@ -88,11 +88,13 @@ retry git clone --depth 1 --branch "${NV_USR_VER}" \
   "https://github.com/NVIDIA/open-gpu-kernel-modules.git" /tmp/ogkm
 
 make -C /tmp/ogkm -j"$(nproc)" modules \
-  SYSSRC="/usr/src/kernels/${KVER}" SYSOUT="/usr/src/kernels/${KVER}" 2>&1 \
-  | grep -vE "objtool: .*'?naked'? return found in .*RETHUNK build"
+  SYSSRC="/usr/src/kernels/${KVER}" SYSOUT="/usr/src/kernels/${KVER}" \
+  > /tmp/ogkm-build.log 2>&1
+grep -vE "objtool: .*'?naked'? return found in .*RETHUNK build" /tmp/ogkm-build.log || true
 make -C /tmp/ogkm modules_install \
-  SYSSRC="/usr/src/kernels/${KVER}" SYSOUT="/usr/src/kernels/${KVER}" 2>&1 \
-  | grep -vE "objtool: .*'?naked'? return found in .*RETHUNK build"
+  SYSSRC="/usr/src/kernels/${KVER}" SYSOUT="/usr/src/kernels/${KVER}" \
+  > /tmp/ogkm-install.log 2>&1
+grep -vE "objtool: .*'?naked'? return found in .*RETHUNK build" /tmp/ogkm-install.log || true
 depmod -a "${KVER}"
 
 echo "--- Generating initramfs for ${KVER} ---"

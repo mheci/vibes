@@ -79,7 +79,9 @@ systemctl reboot
 ```
 
 Every upgrade is verified against the embedded cosign public key before it
-is applied.
+is applied. Signature verification is enforced for the vibes image itself
+(`/etc/containers/policy.json`); other container images pulled on the system
+fall back to the system policy defaults.
 
 ## Releases
 

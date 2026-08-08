@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   actions: read
+  packages: read
 
 jobs:
   release:
@@ -48,8 +49,8 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="ghcr.io/${{ github.repository_owner }}/vibes:latest"
-          cosign verify --key cosign.pub --output /tmp/payload.json "${IMAGE}"
-          DIGEST="$(jq -r '.critical.image.docker-manifest-digest' /tmp/payload.json)"
+          cosign verify -o json --key cosign.pub "${IMAGE}" > /tmp/payload.json
+          DIGEST="$(jq -r '.[0].critical.image.docker-manifest-digest' /tmp/payload.json)"
           echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
           echo "Verified ${IMAGE} (${DIGEST}) with cosign.pub"
 
@@ -70,10 +71,12 @@ jobs:
           name: vibes-sbom
 
       - name: Attest SBOM with cosign
+        env:
+          COSIGN_KEY: ${{ secrets.SIGNING_SECRET }}
         run: |
           set -euo pipefail
           KEY_FILE="$(mktemp)"
-          echo "${{ secrets.SIGNING_SECRET }}" > "${KEY_FILE}"
+          printf '%s' "${COSIGN_KEY}" > "${KEY_FILE}"
           IMAGE="ghcr.io/${{ github.repository_owner }}/vibes:latest"
           SBOM_FILE="$(find "${{ steps.download.outputs.download-path }}" -name '*.spdx.json' | head -n1)"
           if [[ -z "${SBOM_FILE}" ]]; then
@@ -86,10 +89,12 @@ jobs:
           echo "Attested SBOM for ${IMAGE}"
 
       - name: Attest SLSA provenance with cosign
+        env:
+          COSIGN_KEY: ${{ secrets.SIGNING_SECRET }}
         run: |
           set -euo pipefail
           KEY_FILE="$(mktemp)"
-          echo "${{ secrets.SIGNING_SECRET }}" > "${KEY_FILE}"
+          printf '%s' "${COSIGN_KEY}" > "${KEY_FILE}"
           IMAGE="ghcr.io/${{ github.repository_owner }}/vibes:latest"
           PROV="$(mktemp)"
           BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

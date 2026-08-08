@@ -79,12 +79,16 @@ gh_latest_asset_url() {
 }
 
 gh_asset_url() {
-  local repo="$1" pattern="$2"
+  local repo="$1" pattern="$2" tag="${3:-}"
   if ! command -v jq >/dev/null 2>&1; then
     echo "ERROR: jq is required for gh_asset_url but not installed (repo=${repo})" >&2
     return 1
   fi
-  local api_url="https://api.github.com/repos/${repo}/releases/latest"
+  local endpoint="releases/latest"
+  if [[ -n "$tag" ]]; then
+    endpoint="releases/tags/${tag}"
+  fi
+  local api_url="https://api.github.com/repos/${repo}/${endpoint}"
   local headers=(-H "Accept: application/vnd.github+json" -H "User-Agent: vibes-bluebuild")
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     headers+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
@@ -142,10 +146,12 @@ gh_asset_url() {
 }
 
 clean_build_artifacts() {
-  "${DNF[@]}" clean all || true
+  # dnf state is intentionally kept: clearing /var/lib/dnf and
+  # /var/cache/dnf between every module forces later modules to re-sync
+  # all repository metadata. strip-build-tools.sh performs the final
+  # dnf cleanup before the image is sealed.
   rm -f /var/log/dnf5.log* /var/log/dnf.librepo.log* /var/log/hawkey.log* \
         /var/cache/ldconfig/aux-cache || true
-  rm -rf /var/lib/dnf /var/cache/dnf /run/dnf || true
   rm -rf /root/.cache/* /root/.npm/* /root/.cargo/* 2>/dev/null || true
   rm -rf /tmp/vibes-* /tmp/bpftune /tmp/zed* /tmp/zen* /tmp/linux-rnnoise* /tmp/qui* /tmp/nohang /tmp/prelockd 2>/dev/null || true
   rm -f /tmp/*.tar.gz /tmp/*.tar.xz /tmp/*.zip /tmp/*.rpm /tmp/opencode-install.sh 2>/dev/null || true
