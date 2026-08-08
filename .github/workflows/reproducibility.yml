@@ -51,14 +51,20 @@ jobs:
         run: |
           set -euo pipefail
           IMG="ghcr.io/${{ github.repository_owner }}/vibes:latest"
-          LOCAL_ID="$(podman images --format '{{.ID}} {{.Repository}}' | grep -i 'vibes' | awk '{print $1}' | head -n1 || true)"
-          if [[ -z "${LOCAL_ID}" ]]; then
-            echo "::warning::no local rebuilt image found, skipping package comparison"
+          RUNNER="docker"
+          LOCAL_REF="$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -i "vibes" | head -n1 || true)"
+          if [[ -z "${LOCAL_REF}" ]]; then
+            RUNNER="podman"
+            LOCAL_REF="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -i "vibes" | head -n1 || true)"
+          fi
+          if [[ -z "${LOCAL_REF}" ]]; then
+            echo "::warning::no locally rebuilt vibes image found, skipping package comparison"
             exit 0
           fi
-          podman pull "${IMG}" >/dev/null 2>&1 || { echo "::warning::could not pull :latest, skipping package comparison"; exit 0; }
-          podman run --rm "${LOCAL_ID}" rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}\n' 2>/dev/null | sort > /tmp/local-pkgs.txt
-          podman run --rm "${IMG}" rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}\n' 2>/dev/null | sort > /tmp/pub-pkgs.txt
+          echo "Comparing ${LOCAL_REF} (via ${RUNNER}) against ${IMG}"
+          ${RUNNER} pull "${IMG}" >/dev/null 2>&1 || { echo "::warning::could not pull :latest, skipping package comparison"; exit 0; }
+          ${RUNNER} run --rm "${LOCAL_REF}" rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}\n' 2>/dev/null | sort > /tmp/local-pkgs.txt
+          ${RUNNER} run --rm "${IMG}" rpm -qa --qf '%{NAME}-%{VERSION}-%{RELEASE}\n' 2>/dev/null | sort > /tmp/pub-pkgs.txt
           {
             echo "### Package drift vs :latest"
             echo ""
