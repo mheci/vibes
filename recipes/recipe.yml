@@ -53,6 +53,10 @@ modules:
       - source: system
         destination: /
 
+  - type: script
+    scripts:
+      - verify-system-files.sh
+
   - type: default-flatpaks
     configurations:
       - install:
